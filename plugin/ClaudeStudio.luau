@@ -22,6 +22,7 @@ local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local InsertService = game:GetService("InsertService")
 local LogService = game:GetService("LogService")
+local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local ScriptEditorService = game:GetService("ScriptEditorService")
 local Selection = game:GetService("Selection")
@@ -44,7 +45,7 @@ local DEFAULT_URL = ("http://127.0.0.1:%d"):format(PORT_BASE)
 
 -- Tem que bater com o VERSION do servidor (server/agent/config.py). O
 -- make-release.ps1 quebra a build se divergirem.
-local VERSION = "0.2.2"
+local VERSION = "0.2.3"
 local VERSION_URL = "https://claybrick.online/version.json"
 
 local serverUrl = plugin:GetSetting("serverUrl") or DEFAULT_URL
@@ -399,7 +400,15 @@ function Tools.set_property(input)
 			inst[input.name] = decodeValue(input.value)
 		end)
 		if not ok then
-			error("Falha ao definir " .. tostring(input.name) .. ": " .. tostring(err), 0)
+			-- Estruturado em vez de error(): assim o servidor reconhece
+			-- failed_properties e anexa os nomes parecidos que existem de verdade.
+			-- O is_error continua sendo marcado, pelo ok=false.
+			return {
+				ok = false,
+				path = inst:GetFullName(),
+				class = inst.ClassName,
+				failed_properties = { [tostring(input.name)] = tostring(err) },
+			}
 		end
 		return { ok = true, path = inst:GetFullName(), property = input.name }
 	end)
@@ -522,9 +531,27 @@ function Tools.get_output(input)
 		error("Não consegui ler o Output: " .. tostring(history))
 	end
 	local limit = input.limit or 50
+
+	-- since_marker: só o que saiu depois daquela execução. Procura de trás para
+	-- frente porque o que interessa é a ÚLTIMA vez que o marcador apareceu.
+	local floor = 0
+	local markerMissing = false
+	if input.since_marker and input.since_marker ~= "" then
+		for i = #history, 1, -1 do
+			local msg = history[i].message
+			if msg and string.find(msg, input.since_marker, 1, true) then
+				floor = i
+				break
+			end
+		end
+		if floor == 0 then
+			markerMissing = true
+		end
+	end
+
 	local out = {}
 	-- Do mais recente para o mais antigo.
-	for i = #history, 1, -1 do
+	for i = #history, floor + 1, -1 do
 		local entry = history[i]
 		local kind = entry.messageType and entry.messageType.Name or "MessageOutput"
 		local isProblem = kind == "MessageError" or kind == "MessageWarning"
@@ -539,7 +566,178 @@ function Tools.get_output(input)
 			end
 		end
 	end
-	return { count = #out, messages = out }
+
+	local res = { count = #out, messages = out }
+	if markerMissing then
+		-- Devolver o histórico inteiro em silêncio seria pior que devolver nada:
+		-- o agente leria log velho como se fosse resultado do teste dele.
+		res.warning = "Marcador '" .. tostring(input.since_marker) .. "' não está no histórico "
+			.. "(o Output pode ter sido limpo). As mensagens abaixo são o log INTEIRO, não só o "
+			.. "da sua execução."
+	end
+	return res
+end
+
+-- ----------------------------------------------------------------------------
+-- Inspeção espacial
+-- ----------------------------------------------------------------------------
+-- O agente não enxerga o place. Ler propriedade a propriedade não responde as
+-- perguntas que importam depois de construir — "está tudo no ar?", "as peças
+-- estão atravessadas?", "a casa tem 3 studs de altura?". Isto responde em
+-- números, que é a única forma de conferir sem olho.
+
+-- AABB no mundo, pelos 8 cantos: leva a rotação em conta sem matriz na mão.
+local function worldAABB(part)
+	local cf, h = part.CFrame, part.Size / 2
+	local minv, maxv
+	for i = 0, 7 do
+		local p = cf * Vector3.new(
+			(i % 2 == 0) and -h.X or h.X,
+			(math.floor(i / 2) % 2 == 0) and -h.Y or h.Y,
+			(math.floor(i / 4) % 2 == 0) and -h.Z or h.Z
+		)
+		minv = minv and minv:Min(p) or p
+		maxv = maxv and maxv:Max(p) or p
+	end
+	return minv, maxv
+end
+
+local function round(v)
+	return math.floor(v * 100 + 0.5) / 100
+end
+
+local function v3(v)
+	return { x = round(v.X), y = round(v.Y), z = round(v.Z) }
+end
+
+function Tools.inspect_space(input)
+	local root = mustResolve(input.path or "Workspace", "Path")
+	local maxParts = math.clamp(input.max_parts or 300, 1, 2000)
+
+	local parts = {}
+	if root:IsA("BasePart") then
+		table.insert(parts, root)
+	end
+	for _, d in ipairs(root:GetDescendants()) do
+		if d:IsA("BasePart") then
+			table.insert(parts, d)
+			if #parts >= maxParts then
+				break
+			end
+		end
+	end
+
+	if #parts == 0 then
+		return {
+			path = root:GetFullName(),
+			parts = 0,
+			note = "Nada com forma aqui — nenhuma BasePart sob este path.",
+		}
+	end
+
+	local boxes, minAll, maxAll = {}, nil, nil
+	local solta, menor, maior = {}, nil, nil
+	for _, p in ipairs(parts) do
+		local lo, hi = worldAABB(p)
+		boxes[p] = { lo = lo, hi = hi }
+		minAll = minAll and minAll:Min(lo) or lo
+		maxAll = maxAll and maxAll:Max(hi) or hi
+
+		if not p.Anchored then
+			if #solta < 12 then
+				table.insert(solta, p:GetFullName())
+			end
+		end
+		local vol = p.Size.X * p.Size.Y * p.Size.Z
+		if not menor or vol < menor.vol then
+			menor = { vol = vol, p = p }
+		end
+		if not maior or vol > maior.vol then
+			maior = { vol = vol, p = p }
+		end
+	end
+
+	local tamanho = maxAll - minAll
+	local res = {
+		path = root:GetFullName(),
+		parts = #parts,
+		truncated = #parts >= maxParts or nil,
+		bounds = {
+			size = v3(tamanho),
+			center = v3((minAll + maxAll) / 2),
+			floor_y = round(minAll.Y),
+			top_y = round(maxAll.Y),
+		},
+		smallest_part = { path = menor.p:GetFullName(), size = v3(menor.p.Size) },
+		largest_part = { path = maior.p:GetFullName(), size = v3(maior.p.Size) },
+	}
+
+	if #solta > 0 then
+		res.unanchored = solta
+		res.unanchored_warning = "Estas peças têm Anchored=false: no primeiro playtest elas CAEM. "
+			.. "Estrutura (chão, parede, plataforma, decoração) deve ser ancorada."
+	end
+
+	-- Raycast e vizinhança só fazem sentido contra o mundo. Fora do Workspace
+	-- (ReplicatedStorage, ServerStorage) não há chão nem contexto para medir.
+	if not root:IsDescendantOf(workspace) and root ~= workspace then
+		res.note = "Fora do Workspace: sobreposição e apoio não foram checados (não há mundo aqui)."
+		return res
+	end
+
+	local TOL = 0.05
+	local sobrepostas = {}
+	for i = 1, #parts do
+		for j = i + 1, #parts do
+			local a, b = boxes[parts[i]], boxes[parts[j]]
+			local dx = math.min(a.hi.X, b.hi.X) - math.max(a.lo.X, b.lo.X)
+			local dy = math.min(a.hi.Y, b.hi.Y) - math.max(a.lo.Y, b.lo.Y)
+			local dz = math.min(a.hi.Z, b.hi.Z) - math.max(a.lo.Z, b.lo.Z)
+			if dx > TOL and dy > TOL and dz > TOL then
+				if #sobrepostas < 10 then
+					table.insert(sobrepostas, {
+						a = parts[i]:GetFullName(),
+						b = parts[j]:GetFullName(),
+						overlap = round(math.min(dx, dy, dz)),
+					})
+				end
+			end
+		end
+		if #sobrepostas >= 10 then
+			break
+		end
+	end
+	if #sobrepostas > 0 then
+		res.overlapping = sobrepostas
+		res.overlapping_note = "Peças que se atravessam (medido por caixa alinhada aos eixos, "
+			.. "então peça muito girada sai aproximada). Em CSG e em detalhe embutido isso é "
+			.. "intencional; em parede e piso é peça mal posicionada."
+	end
+
+	local noAr = {}
+	for _, p in ipairs(parts) do
+		if #noAr >= 10 then
+			break
+		end
+		local box = boxes[p]
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { p }
+		local origem = Vector3.new((box.lo.X + box.hi.X) / 2, box.lo.Y + 0.05, (box.lo.Z + box.hi.Z) / 2)
+		local hit = workspace:Raycast(origem, Vector3.new(0, -500, 0), params)
+		if not hit then
+			table.insert(noAr, { path = p:GetFullName(), gap = "nada embaixo em 500 studs" })
+		elseif hit.Distance > 0.5 then
+			table.insert(noAr, { path = p:GetFullName(), gap = round(hit.Distance) })
+		end
+	end
+	if #noAr > 0 then
+		res.floating = noAr
+		res.floating_note = "Peças sem apoio logo abaixo. Plataforma flutuante pode ser de "
+			.. "propósito; parede e móvel no ar, não. Confira antes de entregar."
+	end
+
+	return res
 end
 
 -- Memória de projeto: um StringValue em ServerStorage. Mora dentro do place, o
@@ -589,8 +787,15 @@ function Tools.create_instance(input)
 		applyProps(inst, input.properties, failed)
 		inst.Parent = parent -- por último: monta o objeto inteiro, depois pendura
 		local res = { ok = true, path = inst:GetFullName(), class = inst.ClassName }
+		-- Propriedade que não pegou é ERRO, não nota de rodapé. Antes isto voltava
+		-- com ok=true: o agente pedia neon vermelho, recebia "pronto", e o usuário
+		-- via um bloco cinza. O servidor ainda anexa aqui o "você quis dizer" a
+		-- partir do API dump, então a resposta já chega com o nome certo.
 		if next(failed) then
+			res.ok = false
 			res.failed_properties = failed
+			res.hint = "A instância foi criada, mas estas propriedades NÃO foram aplicadas. "
+				.. "Corrija o nome e aplique com set_property — não relate como pronto."
 		end
 		return res
 	end)
@@ -805,11 +1010,15 @@ function Tools.solid_op(input)
 			o:Destroy()
 		end
 		Selection:Set({ res })
-		return ("%s: %s (%s). As peças de origem foram consumidas."):format(
-			tostring(input.operation),
-			res:GetFullName(),
-			res.ClassName
-		)
+		-- Tabela com `path`, e não texto: é o que deixa um batch encadear o
+		-- resultado ("subtraia o vão do muro, depois use o muro") via $id.
+		return {
+			ok = true,
+			path = res:GetFullName(),
+			class = res.ClassName,
+			operation = input.operation,
+			note = "As peças de origem foram consumidas.",
+		}
 	end)
 end
 
@@ -874,7 +1083,17 @@ local OPS = {
 	set_source = true, patch_source = true, move_instance = true,
 	rename_instance = true, clone_instance = true, set_attribute = true,
 	set_tags = true,
+	-- Modelagem entra no lote: eram justamente as ferramentas que o guia elege
+	-- como caminho principal, e ficar de fora significava um card de permissão e
+	-- um waypoint de undo por subtração.
+	solid_op = true, terrain_fill = true, insert_asset = true,
 }
+
+local OP_NAMES = {}
+for nome in pairs(OPS) do
+	table.insert(OP_NAMES, nome)
+end
+table.sort(OP_NAMES)
 
 function Tools.batch(input)
 	local ops = input.ops or {}
@@ -882,13 +1101,22 @@ function Tools.batch(input)
 	local ids = {} -- "$meu_id" -> path criado
 
 	-- Resolve referências "$id" para o path do que foi criado antes no lote.
+	-- Desce em tabelas porque `solid_op.parts` é uma LISTA de paths: sem isso,
+	-- modelar em lote (criar o vão, subtrair do muro) não fecha o circuito.
 	local function deref(v)
 		if type(v) == "string" and v:sub(1, 1) == "$" then
 			local resolved = ids[v]
 			if not resolved then
-				error("Referência desconhecida: " .. v .. " (defina 'id' numa op de create anterior)", 0)
+				error("Referência desconhecida: " .. v .. " (defina 'id' numa op anterior que cria algo)", 0)
 			end
 			return resolved
+		end
+		if type(v) == "table" then
+			local out = {}
+			for k, item in pairs(v) do
+				out[k] = deref(item)
+			end
+			return out
 		end
 		return v
 	end
@@ -899,11 +1127,7 @@ function Tools.batch(input)
 			local name = op.op
 			if not OPS[name] then
 				local msg = ("op #%d inválida: '%s'. Válidas: %s"):format(
-					i, tostring(name), table.concat({
-						"create_instance", "delete_instance", "set_property", "set_source",
-						"patch_source", "move_instance", "rename_instance", "clone_instance",
-						"set_attribute", "set_tags",
-					}, ", ")
+					i, tostring(name), table.concat(OP_NAMES, ", ")
 				)
 				if stopOnError then
 					error(msg, 0)
@@ -925,7 +1149,16 @@ function Tools.batch(input)
 					if op.id and res and res.path then
 						ids[op.id] = res.path
 					end
-					table.insert(results, { index = i, op = name, ok = true, path = res and res.path })
+					-- O resultado da op vai INTEIRO para a lista. Antes só o `path`
+					-- sobrevivia, e um failed_properties morria aqui: dentro de um
+					-- batch, propriedade inventada não deixava rastro nenhum.
+					local linha = { index = i, op = name, ok = res == nil or res.ok ~= false }
+					if type(res) == "table" then
+						linha.path = res.path
+						linha.class = res.class
+						linha.failed_properties = res.failed_properties
+					end
+					table.insert(results, linha)
 				else
 					local msg = tostring(res)
 					table.insert(results, { index = i, op = name, ok = false, error = msg })
@@ -945,6 +1178,16 @@ function Tools.batch(input)
 	end)
 end
 
+-- Marcador de execução: uma string única que vai para o Output antes do trabalho
+-- começar, para o get_output(since_marker=...) saber onde a execução começou.
+local markerSeq = 0
+local function emitMarker(kind)
+	markerSeq += 1
+	local marker = ("[claybrick:%s:%d:%d]"):format(kind, os.time(), markerSeq)
+	print(marker)
+	return marker
+end
+
 function Tools.run_code(input)
 	if not loadstring then
 		error("loadstring não está disponível neste Studio — run_code não funciona aqui.")
@@ -953,6 +1196,8 @@ function Tools.run_code(input)
 	if not fn then
 		error("Erro de compilação: " .. tostring(compileErr), 0)
 	end
+	local marker = emitMarker("run_code")
+	local timeout = math.clamp(tonumber(input.timeout) or 10, 1, 120)
 
 	-- Captura print/warn substituindo-os no ambiente do chunk. Mais confiável
 	-- que LogService.MessageOut, que já teve histórico de não disparar em plugin.
@@ -972,15 +1217,39 @@ function Tools.run_code(input)
 	)
 	setfenv(fn, env)
 
-	local ok, res = pcall(function()
-		return recorded("Claude: " .. (input.label or "run_code"), fn)
+	-- O timeout roda o chunk numa thread separada e espera até `timeout`. Isso
+	-- cobre o caso real de código que dá yield e nunca volta (um :Wait() que não
+	-- resolve, um laço com task.wait sem fim): em vez de a sessão inteira ficar
+	-- presa até o TOOL_TIMEOUT do servidor, o agente recebe uma resposta.
+	--
+	-- O que ele NÃO cobre, e a descrição da ferramenta diz isso: código que nunca
+	-- dá yield. O Studio é de thread única — um `while true do end` não devolve o
+	-- controle para ninguém, nem para o relógio aqui embaixo.
+	local done, ok, res = false, nil, nil
+	task.spawn(function()
+		ok, res = pcall(function()
+			return recorded("Claude: " .. (input.label or "run_code"), fn)
+		end)
+		done = true
 	end)
 
+	local prazo = os.clock() + timeout
+	while not done and os.clock() < prazo do
+		task.wait(0.05)
+	end
+
 	local out = {
-		ok = ok,
+		ok = ok ~= false,
+		marker = marker,
 		output = #captured > 0 and table.concat(captured, "\n") or nil,
 	}
-	if ok then
+	if not done then
+		out.ok = false
+		out.timed_out = true
+		out.error = ("O código não terminou em %.0fs e CONTINUA rodando em segundo plano."):format(timeout)
+			.. " Provavelmente há um yield que nunca resolve (um :Wait() sem evento, um laço sem"
+			.. " saída). O que ele já tiver escrito no place permanece."
+	elseif ok then
 		out.returned = (res ~= nil) and encodeValue(res) or nil
 		if out.returned == nil and out.output == nil then
 			out.note = "Rodou sem erro. Não houve return nem print."
@@ -996,6 +1265,7 @@ function Tools.run_playtest(input)
 		error("Já há uma simulação rodando. Pare-a antes.")
 	end
 	local duration = math.clamp(input.duration or 3, 0.5, 30)
+	local marker = emitMarker("playtest")
 	local before = #LogService:GetLogHistory()
 
 	RunService:Run()
@@ -1005,6 +1275,7 @@ function Tools.run_playtest(input)
 	local out = {
 		ok = true,
 		ran_for = duration,
+		marker = marker,
 		warning = "A simulação NÃO foi revertida: Stop() não restaura o place. "
 			.. "O que a física moveu e os scripts criaram continua aí.",
 	}
@@ -1024,6 +1295,11 @@ function Tools.run_playtest(input)
 	return out
 end
 
+-- Devolve (texto, falhou). A falha não vem só de erro do Luau: uma ferramenta
+-- pode terminar sem estourar e mesmo assim não ter feito o que foi pedido — é o
+-- caso de uma propriedade que não existe. `ok = false` no resultado é o que
+-- marca isso, e é o que vira is_error para o modelo. Sem isto, o agente lê
+-- "sucesso" e relata como pronto o que saiu errado.
 local function executeTool(name, input)
 	local fn = Tools[name]
 	if not fn then
@@ -1031,9 +1307,9 @@ local function executeTool(name, input)
 	end
 	local result = fn(input or {})
 	if type(result) == "table" then
-		return HttpService:JSONEncode(result)
+		return HttpService:JSONEncode(result), result.ok == false
 	end
-	return tostring(result)
+	return tostring(result), false
 end
 
 -- ----------------------------------------------------------------------------
@@ -1115,6 +1391,72 @@ local MODE_LABEL = {
 	acceptEdits = "Aceitar edições",
 	bypass = "Sem permissões",
 }
+
+-- ----------------------------------------------------------------------------
+-- Apoiadores
+-- ----------------------------------------------------------------------------
+-- Quem paga os R$50 do mês aparece no crédito que se alterna com o "pensando",
+-- enquanto o modelo trabalha. A lista vem do site; se não vier, a UI segue
+-- exatamente como era — apoio é enfeite, nunca requisito.
+local APOIADORES_URL = "https://claybrick.online/api/apoiadores.php"
+local APOIADORES_REFRESH = 1800 -- segundos
+
+local apoiadores = {}
+local apoioIndice = 0
+
+local function carregarApoiadores()
+	task.spawn(function()
+		while true do
+			local ok, resp = pcall(function()
+				return HttpService:RequestAsync({ Url = APOIADORES_URL, Method = "GET" })
+			end)
+			if ok and resp and resp.Success then
+				local okd, dados = pcall(function()
+					return HttpService:JSONDecode(resp.Body)
+				end)
+				if okd and type(dados) == "table" and type(dados.apoiadores) == "table" then
+					local limpos = {}
+					for _, a in ipairs(dados.apoiadores) do
+						-- O servidor já valida, mas isto aqui roda no Studio de
+						-- outra pessoa: um nome que não seja string viraria erro
+						-- dentro do laço da UI, e a bolha de raciocínio morreria.
+						if type(a) == "table" and type(a.nome) == "string" and a.nome ~= "" then
+							table.insert(limpos, {
+								nome = string.sub(a.nome, 1, 40),
+								link = type(a.link) == "string" and a.link or nil,
+							})
+						end
+					end
+					apoiadores = limpos
+				end
+			end
+			task.wait(APOIADORES_REFRESH)
+		end
+	end)
+end
+
+local function proximoApoiador()
+	if #apoiadores == 0 then
+		return nil
+	end
+	apoioIndice = (apoioIndice % #apoiadores) + 1
+	return apoiadores[apoioIndice]
+end
+
+local function abrirLinkApoiador(apoio)
+	if not apoio or type(apoio.link) ~= "string" then
+		return
+	end
+	-- Só http(s). O link vem de terceiro, e mandar qualquer esquema para o
+	-- OpenBrowserWindow é entregar a alguém de fora a escolha do que o Studio
+	-- vai tentar abrir na máquina do usuário.
+	if not string.match(apoio.link, "^https?://") then
+		return
+	end
+	pcall(function()
+		GuiService:OpenBrowserWindow(apoio.link)
+	end)
+end
 local MODE_COLOR = {
 	ask = COLORS.accent,
 	acceptEdits = COLORS.warn,
@@ -1501,9 +1843,26 @@ local function makeBubble(role)
 	return container, label
 end
 
-local function addBubble(role, text)
+-- As notas de versão vêm do CHANGELOG.md, que é markdown: lá `**assim**` quer
+-- dizer negrito. O TextLabel não sabe disso e mostrava os asteriscos crus.
+--
+-- A ESCAPADA VEM PRIMEIRO, e não é detalhe: com RichText ligado, um "<" solto no
+-- meio do texto faz o Roblox considerar a string inteira marcação inválida e
+-- recusá-la — a bolha apareceria VAZIA. Escapar antes garante que o único
+-- markup existente seja o que nós mesmos inserimos depois.
+local function paraRichText(texto)
+	local seguro = texto:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+	return (seguro:gsub("%*%*(.-)%*%*", "<b>%1</b>"))
+end
+
+local function addBubble(role, text, rico)
 	local _, label = makeBubble(role)
-	label.Text = text
+	if rico then
+		label.RichText = true
+		label.Text = paraRichText(text)
+	else
+		label.Text = text
+	end
 	autoscroll()
 end
 
@@ -1524,8 +1883,11 @@ local function appendThinking(chunk)
 		local container, label = makeBubble("assistant")
 		container.BackgroundColor3 = COLORS.panel
 
-		local cabecalho = Instance.new("TextLabel")
+		-- TextButton, e não TextLabel, porque quando o crédito de apoiador está
+		-- na tela ele é clicável — leva ao link de quem pagou.
+		local cabecalho = Instance.new("TextButton")
 		cabecalho.BackgroundTransparency = 1
+		cabecalho.AutoButtonColor = false
 		cabecalho.Size = UDim2.new(1, 0, 0, 14)
 		cabecalho.Font = Enum.Font.Code
 		cabecalho.TextSize = 11
@@ -1535,11 +1897,37 @@ local function appendThinking(chunk)
 		cabecalho.LayoutOrder = 0
 		cabecalho.Parent = container
 
+		local apoioNaTela = nil
+		cabecalho.MouseButton1Click:Connect(function()
+			abrirLinkApoiador(apoioNaTela)
+		end)
+
 		-- Pulsa enquanto o raciocínio chega. Para sozinho quando a bolha morre.
+		--
+		-- A espera é o único momento em que a atenção está parada aqui, então é
+		-- onde o crédito de quem banca o mês aparece. A troca acontece no ponto
+		-- mais APAGADO do pulso: trocar no claro pisca e chama atenção demais
+		-- para um anúncio.
 		task.spawn(function()
+			local ciclo = 0
 			while cabecalho.Parent do
 				tween(cabecalho, { TextTransparency = 0.65 }, 0.7, Enum.EasingStyle.Sine)
 				task.wait(0.7)
+
+				ciclo += 1
+				if ciclo % 4 == 0 then
+					local a = proximoApoiador()
+					if a then
+						apoioNaTela = a
+						cabecalho.Text = "◆ apoiado por " .. tostring(a.nome)
+						cabecalho.TextColor3 = COLORS.subtle
+					end
+				elseif ciclo % 4 == 2 and apoioNaTela then
+					apoioNaTela = nil
+					cabecalho.Text = "● pensando"
+					cabecalho.TextColor3 = COLORS.accent
+				end
+
 				tween(cabecalho, { TextTransparency = 0 }, 0.7, Enum.EasingStyle.Sine)
 				task.wait(0.7)
 			end
@@ -1551,7 +1939,10 @@ local function appendThinking(chunk)
 		lista.Parent = container
 
 		label.LayoutOrder = 1
-		label.Font = Enum.Font.GothamItalic
+		-- Enum.Font.GothamItalic NÃO existe (o enum legado só tem Gotham,
+		-- GothamMedium, GothamBold e GothamBlack) — isto estourava e derrubava a
+		-- bolha de raciocínio inteira. Achado pelo check_syntax deste projeto.
+		label.Font = Enum.Font.Gotham
 		label.TextSize = 12
 		label.TextColor3 = COLORS.subtle
 		thinkLabel = label
@@ -1834,13 +2225,14 @@ local function handleToolJob(ev)
 	end
 
 	setStatus("Trabalhando: " .. name)
-	local okx, output = pcall(executeTool, name, ev.input)
-	addToolLine(name, ev.input, okx)
+	local okx, output, softFail = pcall(executeTool, name, ev.input)
+	local falhou = not okx or softFail == true
+	addToolLine(name, ev.input, not falhou)
 	postJSON("/session/tool_result", {
 		session_id = sessionId,
 		id = ev.id,
 		content = okx and output or tostring(output),
-		is_error = not okx,
+		is_error = falhou,
 	})
 end
 
@@ -2114,7 +2506,8 @@ local function checkForUpdates()
 					.. "Para atualizar, rode isto num PowerShell:\n\n"
 					.. UPDATE_CMD
 					.. "\n\nÉ o mesmo comando da instalação: ele atualiza o servidor e o plugin, e "
-					.. "preserva sua chave no .env. Depois, feche e abra o Studio."
+					.. "preserva sua chave no .env. Depois, feche e abra o Studio.",
+				true -- as notas vêm em markdown; renderiza o negrito
 			)
 		end)
 	end
@@ -2133,3 +2526,5 @@ task.spawn(function()
 	end
 	checkForUpdates()
 end)
+
+carregarApoiadores()

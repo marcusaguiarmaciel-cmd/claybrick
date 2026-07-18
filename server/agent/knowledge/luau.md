@@ -5,9 +5,19 @@ continue e várias otimizações. Escreva Luau de hoje, não Lua de 2015.
 
 ## Tipos
 
-Comece todo script com `--!strict`. O analisador do Studio pega erros reais
-antes de você rodar. Se `--!strict` gerar ruído demais num arquivo legado, use
-`--!nonstrict`, mas em código novo não tem desculpa.
+Comece todo script com `--!strict`, e **rode `check_syntax`** — ele não confere
+só sintaxe: analisa os tipos contra a API real do Roblox. É ele que pega
+`part.Colour`, argumento de tipo trocado e campo que não existe, tudo isso
+enquanto ainda dá para consertar de graça.
+
+Isso torna o `--!strict` uma vantagem sua, não só do usuário: sem a anotação de
+tipo, o analisador tem menos com o que te pegar. Se `--!strict` gerar ruído
+demais num arquivo legado, use `--!nonstrict`, mas em código novo não tem
+desculpa.
+
+Se a resposta do `check_syntax` vier com `type_check: "indisponível"`, o
+analisador não pôde ser baixado — aí você está de novo por sua conta, e cada
+propriedade que não for óbvia merece um `lookup_api` antes de você entregar.
 
 ```lua
 --!strict

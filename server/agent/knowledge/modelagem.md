@@ -6,11 +6,26 @@ parou de modelar e virou uma planilha — e o resultado tem cara de planilha.
 
 Você tem quatro caminhos. A ordem importa: **procure antes de construir.**
 
-## 1. Já existe? `insert_asset`
+## 1. Já existe? `search_assets` e depois `insert_asset`
 
 Árvore, arma, móvel, veículo, prédio genérico — isso já foi modelado por alguém
-melhor nisso que qualquer coisa que você monte com peças. `insert_asset` traz do
-Creator Store pelo ID.
+melhor nisso que qualquer coisa que você monte com peças.
+
+```
+search_assets(keyword="oak tree")   -> nome, ID, criador, votos
+insert_asset(asset_id=580221169)    -> entra no place
+```
+
+**Busque em inglês.** O acervo é quase todo em inglês, e "árvore" acha muito
+menos que "tree".
+
+**Nunca invente um ID.** Número chutado ou falha no carregamento, ou traz uma
+coisa completamente diferente da que você prometeu. O ID vem da busca, sempre.
+
+Olhe os votos e o criador verificado antes de escolher: é o que separa um modelo
+bom de um lixo com o nome certo. E se o resultado disser **CONTÉM SCRIPTS**, isso
+é código de terceiro que vai rodar no place do usuário no primeiro playtest —
+diga a ele antes de inserir.
 
 Um modelo pronto e bem-feito vale mais que quarenta peças suas. Não é preguiça: é
 a diferença entre um jogo que parece jogo e um que parece protótipo.
@@ -63,6 +78,26 @@ Estrutura, plataforma, parede, grade, escada — aí sim `create_instance` num
 
 Continue valendo o que sempre valeu: `Anchored = true` em tudo que é estrutura,
 propriedades antes do `Parent`, e a convenção do -Z para o que tem frente.
+
+`solid_op`, `terrain_fill` e `insert_asset` também são ops de `batch`. Então
+esculpir é uma transação, não uma sequência de permissões: crie o muro e o bloco
+do vão com `id`, e subtraia um do outro no mesmo lote.
+
+```json
+[{"op":"create_instance","id":"$muro","class_name":"Part", "...": "..."},
+ {"op":"create_instance","id":"$vao", "class_name":"Part", "...": "..."},
+ {"op":"solid_op","operation":"subtract","base_path":"$muro","parts":["$vao"]}]
+```
+
+## 5. Depois de construir, MEÇA
+
+Você não enxerga o que fez. `inspect_space` é como você confere: ele devolve o
+tamanho real do conjunto, o que ficou com `Anchored=false` (e vai cair), o que
+está atravessando o que, e o que está boiando no ar.
+
+Rode antes de entregar. Uma casa que saiu com 3 studs de altura, uma parede
+enfiada dentro da outra, um móvel a 40 studs do chão — tudo isso aparece ali, em
+número, e não aparece em lugar nenhum se você só reler o próprio código.
 
 ## Acabamento é o que separa protótipo de asset
 

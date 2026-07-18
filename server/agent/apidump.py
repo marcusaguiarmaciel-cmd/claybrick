@@ -25,9 +25,9 @@ precisa saber a diferença antes de escrever, não depois.
 """
 
 import asyncio
+import difflib
 import json
 import os
-import time
 from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -161,6 +161,37 @@ class ApiDump:
         hits = [n for n in self._classes if low in n.lower()]
         hits.sort(key=len)
         return hits[:limit]
+
+    def suggest_members(
+        self, class_name: str, name: str, member_type: str = "Property", limit: int = 4
+    ) -> List[str]:
+        """
+        Membros parecidos com `name` na classe — o "você quis dizer" de uma
+        propriedade que não existe.
+
+        É o outro lado do lookup_api: aquele exige que o agente lembre de
+        perguntar; este responde sem ser chamado, no momento em que ele errou.
+        """
+        resolved = self._resolve_name(class_name)
+        if not resolved:
+            return []
+        names: List[str] = []
+        for cls in self._chain(resolved):
+            for m in cls.get("Members", []):
+                if m.get("MemberType") != member_type:
+                    continue
+                marks, hide = self._flags(m)
+                if hide or any(x.startswith("DEPRECADO") for x in marks):
+                    continue
+                names.append(m["Name"])
+
+        # Diferença só de caixa é o erro mais comum e o mais fácil de resolver:
+        # se houver, é a resposta, e mostrar alternativas difusas só atrapalha.
+        low = name.lower()
+        exact = [n for n in names if n.lower() == low]
+        if exact:
+            return exact[:limit]
+        return difflib.get_close_matches(name, names, n=limit, cutoff=0.6)
 
     # ------------------------------------------------------------- formatação
     @staticmethod

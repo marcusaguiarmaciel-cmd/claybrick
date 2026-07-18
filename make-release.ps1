@@ -55,6 +55,16 @@ Copy-Item "README.en.md" $stage -Force
 $leaked = Get-ChildItem $stage -Recurse -Force -Filter ".env"
 if ($leaked) { throw "ABORTADO: um .env entrou no pacote ($($leaked[0].FullName))" }
 
+# Mesma ideia para as chaves do gateway de pagamento. O config.php de verdade
+# mora em ~/claybrick-dados/ (fora da raiz web); se uma copia preenchida aparecer
+# em site\api\, ela iria para o servidor publico -- e o access token do Mercado
+# Pago junto. So o .exemplo passa.
+$cfgVazado = Get-ChildItem (Join-Path $site "api") -Filter "config*.php" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne "config.exemplo.php" }
+if ($cfgVazado) {
+    throw "ABORTADO: $($cfgVazado[0].Name) esta em site\api\. As chaves do gateway nao podem ir para o site -- mova para ~/claybrick-dados/config.php no servidor."
+}
+
 # ---- Impressao digital do conteudo -----------------------------------------
 # TEM que ser aqui, com o $stage ainda de pe: mais abaixo ele ja' foi apagado, e
 # hashear pasta inexistente devolve o SHA da string vazia -- sempre igual, todo
@@ -109,9 +119,13 @@ $json = [ordered]@{ version = $srvVer; notes = $notes } | ConvertTo-Json
 # ---- Seccao de historico no site -------------------------------------------
 # Gerada a partir do MESMO CHANGELOG.md que alimenta o version.json, para as duas
 # nao divergirem.
+# A ordem aqui e' a unica que funciona: escapa PRIMEIRO (senao as tags que a
+# gente mesmo insere logo abaixo virariam &lt;code&gt; na tela), e so' depois
+# converte o markdown do CHANGELOG.md em HTML de verdade.
 function ConvertTo-SafeHtml([string]$s) {
     $s = $s -replace "&", "&amp;" -replace "<", "&lt;" -replace ">", "&gt;"
-    [regex]::Replace($s, '`([^`]+)`', '<code>$1</code>')
+    $s = [regex]::Replace($s, '`([^`]+)`', '<code>$1</code>')
+    [regex]::Replace($s, '\*\*([^*]+)\*\*', '<strong>$1</strong>')
 }
 
 # "[segurança] texto" vira um chip colorido + o texto. Sem prefixo, so' o texto.
@@ -189,6 +203,9 @@ Write-Host ""
 Write-Host "site\ pronto para publicar ($kb KB no zip):" -ForegroundColor Green
 Get-ChildItem $site -Force | Where-Object { -not $_.PSIsContainer } |
     ForEach-Object { Write-Host ("   {0,-16} {1,8:N1} KB" -f $_.Name, ($_.Length / 1KB)) }
+Get-ChildItem $site -Force -Directory |
+    ForEach-Object { Write-Host ("   {0,-16} {1,8} " -f ($_.Name + "/"), "pasta") }
 Write-Host ""
 Write-Host "Suba TODOS eles para o public_html (inclusive o .htaccess, que fica" -ForegroundColor Gray
 Write-Host "escondido no File Manager ate voce marcar 'Show Hidden Files')." -ForegroundColor Gray
+Write-Host "A pasta api/ vai junto -- sem ela a area de apoiadores nao funciona." -ForegroundColor Gray

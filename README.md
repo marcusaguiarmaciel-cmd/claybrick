@@ -117,7 +117,19 @@ undo. `run_code` e `run_playtest` são a exceção: nem tudo que fazem é revers
   oficial da versão instalada do Studio (682 classes, 351 enums, cacheado em
   `server/.cache/`). A ferramenta `lookup_api` responde com as propriedades,
   métodos e eventos que existem de verdade — marcando os deprecados e os que só
-  funcionam via plugin. É o que impede o `part.Colour` inventado.
+  funcionam via plugin.
+- **Propriedade inventada não passa em silêncio.** Se ele escrever `part.Colour`,
+  a escrita falha, volta marcada como erro, e o servidor anexa à resposta os
+  nomes parecidos que existem mesmo (`Color`, `BrickColor`) — direto do API dump.
+  O erro vira correção numa ida e volta, em vez de virar um bloco cinza que o
+  usuário descobre depois.
+- **Análise estática de Luau.** O `check_syntax` não compila só: roda o
+  `luau-lsp` com as definições de tipo do Roblox. Ele pega o campo que não
+  existe, o argumento de tipo trocado e o retorno errado — antes de rodar
+  qualquer coisa. É o que dá sentido ao `--!strict` que os guias mandam escrever.
+- **Modelo pronto quando cabe.** `search_assets` procura no Creator Store por
+  palavra-chave e devolve nome, ID, criador, votos e se o modelo contém scripts;
+  `insert_asset` insere pelo ID que veio dali.
 - **Guias curados** de Luau moderno e arquitetura cliente-servidor entram no
   system prompt (`server/agent/knowledge/`).
 - **Contexto do place** é injetado no início da sessão: nome, contagem de
@@ -130,30 +142,45 @@ undo. `run_code` e `run_playtest` são a exceção: nem tudo que fazem é revers
 
 Uma escada, do barato pro caro:
 
-1. `check_syntax` — compila sem executar. Instantâneo, sem efeito colateral.
-2. `run_code` com `require` + asserts — testa um ModuleScript **de verdade**, em
+1. `check_syntax` — sintaxe **e tipos**, sem executar. Instantâneo, sem efeito
+   colateral.
+2. `inspect_space` — mede o que foi construído: tamanho real, peça solta que vai
+   cair, peça atravessando peça, peça boiando no ar. É como um agente que não
+   enxerga confere o próprio trabalho.
+3. `run_code` com `require` + asserts — testa um ModuleScript **de verdade**, em
    edit mode, sem sujar o place. É onde a maior parte do teste deve morar.
-3. `get_output` — lê o Output do Studio para ver o que aconteceu.
-4. `run_playtest` — só quando o comportamento em runtime é o objeto do teste.
+4. `get_output` — lê o Output do Studio para ver o que aconteceu. Cada execução
+   devolve um marcador, então dá para ler só o que ela gerou.
+5. `run_playtest` — só quando o comportamento em runtime é o objeto do teste.
    **É destrutivo**: `RunService:Stop()` não restaura o place, então o que a
    física derrubar e os scripts criarem permanece.
 
 ## Ferramentas
 
+31 ao todo.
+
 **Leitura** (nunca pergunta) — `get_tree`, `get_place_info`, `get_selection`,
 `set_selection`, `get_properties`, `find_instances`, `get_source`,
-`search_source`, `lookup_api`, `check_syntax`, `get_output`,
-`get_project_memory`
+`search_source`, `lookup_api`, `check_syntax`, `get_output`, `inspect_space`,
+`search_assets`, `get_project_memory`
 
 **Escrita** (pergunta; desfazível) — `create_instance`, `delete_instance`,
 `set_property`, `set_source`, `patch_source`, `move_instance`, `rename_instance`,
 `clone_instance`, `set_attribute`, `set_tags`, `batch`, `set_project_memory`,
 `insert_asset`
 
+**Modelagem** (pergunta; desfazível) — `solid_op` (união/subtração/interseção),
+`terrain_fill` (terreno de verdade, com `Air` para cavar)
+
 **Execução** (pergunta em quase todo modo) — `run_code`, `run_playtest`
 
+`lookup_api`, `search_assets` e a parte de tipos do `check_syntax` resolvem no
+servidor, sem ida ao Studio.
+
 `batch` é o que faz projetos: várias escritas numa transação só — um undo, uma
-permissão. Suporta referências `$id` para usar o path de algo criado no mesmo lote.
+permissão. Aceita também `solid_op`, `terrain_fill` e `insert_asset`, e resolve
+referências `$id` em qualquer argumento de path — inclusive dentro de listas.
+Assim "crie o muro, crie o vão, subtraia um do outro" é uma transação só.
 
 ## Endpoints
 
@@ -165,7 +192,7 @@ permissão. Suporta referências `$id` para usar o path de algo criado no mesmo 
 | `POST /session/cancel` | para o turno sem perder a conversa |
 | `POST /session/reset` | encerra a sessão |
 | `GET /tools` | ferramentas e classes de permissão |
-| `GET /health` | status, backends, API dump |
+| `GET /health` | status, backends, API dump, analisador de Luau |
 
 ## Estrutura
 
@@ -174,10 +201,12 @@ server/
   app.py                    casca HTTP + ciclo de vida das sessões
   agent/
     config.py               lê o .env sem poluir os.environ
-    tools.py                as 27 ferramentas + classes de permissão
+    tools.py                as 31 ferramentas + classes de permissão
     prompt.py               system prompt (identidade, método, valores)
     knowledge/*.md          guias de Luau e arquitetura
     apidump.py              download/índice do Full-API-Dump
+    assets.py               busca no Creator Store
+    luau_check.py           análise estática (luau-lsp + tipos do Roblox)
     session.py              sessões + ponte de ferramentas
     backends.py             backend api (streaming) e assinatura
 plugin/
@@ -241,6 +270,9 @@ falar com a ponte. Nesse ponto o problema já não é o Claybrick.
 
 - Estado da conversa fica na memória do servidor; reiniciar limpa as sessões.
   A **memória de projeto** não — ela vive no place.
+- O analisador de Luau (`luau-lsp`, ~17 MB) é baixado na primeira checagem de
+  sintaxe e fica em `server/.cache/`. Sem rede, o `check_syntax` volta a conferir
+  só a sintaxe — e diz isso na resposta, em vez de fingir que checou os tipos.
 - Paths usam `.` como separador — evite nomes de objeto com `.` no meio.
 - Só funciona no Studio (plugins não rodam em jogo publicado).
 - O `run_code` roda com permissão de plugin. No modo **Sem permissões** ele

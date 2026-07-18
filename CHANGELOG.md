@@ -12,6 +12,18 @@ ignorar avisos.
 Formato: `## <versão>` e bullets. A versão precisa bater com o `VERSION` do
 `server/agent/config.py` e do `plugin/ClaudeStudio.luau`.
 
+## 0.2.3
+
+- [correção] **Propriedade errada não volta mais como "pronto".** Se ele escrevia `Colour` em vez de `Color` dentro de um lote, a peça nascia cinza e a resposta dizia sucesso — você só descobria olhando. Agora a escrita falha alto, e ele ainda recebe de volta o nome certo ("em Part existe: Color, BrickColor") e corrige na hora.
+- [novo] **Ele confere os tipos antes de entregar.** O `check_syntax` deixou de só compilar: agora analisa o código contra a API real do Roblox e pega campo que não existe, argumento trocado e retorno errado — sem rodar nada. Isso é o que faz o `--!strict` valer a pena de verdade.
+- [novo] **Busca de modelos no Creator Store.** Ele procura por palavra-chave e vê nome, criador, votos e se o modelo contém scripts, em vez de chutar um ID e inserir qualquer coisa. Para árvore, móvel e veículo, um modelo pronto ganha de quarenta peças montadas na mão.
+- [novo] **Ele mede o que constrói.** Como não enxerga o place, ganhou uma ferramenta que devolve tamanho real, peça sem âncora (que ia cair no primeiro playtest), peça atravessando peça e peça boiando no ar. É assim que ele acha o próprio erro antes de você achar.
+- [novo] **Modelar virou uma transação.** Cortar, fundir, esculpir terreno e inserir asset agora entram num lote só: uma permissão e um Ctrl+Z para a construção inteira, em vez de um card por operação.
+- [correção] `run_code` respeita o tempo limite. Código que trava esperando algo que nunca vem devolve o controle em vez de prender a conversa até estourar.
+- [correção] Ler o Output "só do último teste" passou a funcionar de verdade. Antes o filtro era ignorado em silêncio e ele lia log velho achando que era o resultado do teste dele.
+- [correção] A bolha de raciocínio usava uma fonte que não existe e quebrava ao aparecer. Achado pela análise de tipos deste próprio release.
+- [novo] **Apoiadores.** Por R$50 seu nome e seu link ficam 30 dias no claybrick.online e aqui dentro: enquanto o Claude pensa, o crédito de quem banca o mês aparece no lugar do "pensando" — e dá pra clicar. Sem assinatura e sem cobrança recorrente; acaba sozinho.
+
 ## 0.2.2
 
 - [correção] O modo assinatura voltou a subir. Na 0.2.1 ele morria com "Claude Code not found at..." apontando para um arquivo que estava lá, inteiro — a mensagem mentia. O system prompt tinha crescido além do limite de linha de comando do Windows, e agora vai por arquivo, sem limite.

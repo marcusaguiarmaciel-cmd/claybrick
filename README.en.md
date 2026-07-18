@@ -120,7 +120,19 @@ is reversible.
   `Full-API-Dump.json` for the installed Studio version (682 classes, 351 enums,
   cached in `server/.cache/`). The `lookup_api` tool answers with the properties,
   methods and events that actually exist — flagging the deprecated ones and the
-  plugin-only ones. That's what prevents an invented `part.Colour`.
+  plugin-only ones.
+- **An invented property never passes silently.** If it writes `part.Colour`, the
+  write fails, comes back marked as an error, and the server appends the names
+  that do exist (`Color`, `BrickColor`) straight from the API dump. The mistake
+  becomes a correction in one round trip, instead of becoming a grey brick the
+  user discovers later.
+- **Static Luau analysis.** `check_syntax` doesn't just compile: it runs
+  `luau-lsp` with the Roblox type definitions. It catches the field that doesn't
+  exist, the wrong argument type and the wrong return — before anything runs.
+  That is what makes the `--!strict` the guides ask for actually worth writing.
+- **A ready-made model when one fits.** `search_assets` searches the Creator
+  Store by keyword and returns name, ID, creator, votes and whether the model
+  contains scripts; `insert_asset` inserts by the ID that came from it.
 - **Curated guides** on modern Luau and client-server architecture go into the
   system prompt (`server/agent/knowledge/`).
 - **Place context** is injected at the start of the session: name, instance and
@@ -133,31 +145,46 @@ is reversible.
 
 A ladder, cheapest first:
 
-1. `check_syntax` — compiles without running. Instant, no side effects.
-2. `run_code` with `require` + asserts — tests a ModuleScript **for real**, in
+1. `check_syntax` — syntax **and types**, without running. Instant, no side
+   effects.
+2. `inspect_space` — measures what was built: real size, loose parts that will
+   fall, parts intersecting parts, parts floating in mid-air. It's how an agent
+   that cannot see checks its own work.
+3. `run_code` with `require` + asserts — tests a ModuleScript **for real**, in
    edit mode, without dirtying the place. This is where most testing should live.
-3. `get_output` — reads Studio's Output to see what happened.
-4. `run_playtest` — only when runtime behavior is the thing under test. It is
+4. `get_output` — reads Studio's Output to see what happened. Each run returns a
+   marker, so it can read only what that run produced.
+5. `run_playtest` — only when runtime behavior is the thing under test. It is
    **destructive**: `RunService:Stop()` does not restore the place, so whatever
    physics knocked over and scripts created stays.
 
 ## Tools
 
+31 in total.
+
 **Read** (never asks) — `get_tree`, `get_place_info`, `get_selection`,
 `set_selection`, `get_properties`, `find_instances`, `get_source`,
-`search_source`, `lookup_api`, `check_syntax`, `get_output`,
-`get_project_memory`
+`search_source`, `lookup_api`, `check_syntax`, `get_output`, `inspect_space`,
+`search_assets`, `get_project_memory`
 
 **Write** (asks; undoable) — `create_instance`, `delete_instance`,
 `set_property`, `set_source`, `patch_source`, `move_instance`, `rename_instance`,
 `clone_instance`, `set_attribute`, `set_tags`, `batch`, `set_project_memory`,
 `insert_asset`
 
+**Modeling** (asks; undoable) — `solid_op` (union/subtract/intersect),
+`terrain_fill` (real terrain, with `Air` to carve)
+
 **Execute** (asks in nearly every mode) — `run_code`, `run_playtest`
 
+`lookup_api`, `search_assets` and the type-checking half of `check_syntax`
+resolve on the server, without a trip to Studio.
+
 `batch` is what makes projects possible: many writes in a single transaction —
-one undo, one permission prompt. It supports `$id` references so you can use the
-path of something created earlier in the same batch.
+one undo, one permission prompt. It also accepts `solid_op`, `terrain_fill` and
+`insert_asset`, and resolves `$id` references in any path argument — including
+inside lists. So "create the wall, create the opening, subtract one from the
+other" is a single transaction.
 
 ## Endpoints
 
@@ -169,7 +196,7 @@ path of something created earlier in the same batch.
 | `POST /session/cancel` | stops the turn without losing the conversation |
 | `POST /session/reset` | ends the session |
 | `GET /tools` | tools and permission classes |
-| `GET /health` | status, backends, API dump |
+| `GET /health` | status, backends, API dump, Luau analyzer |
 
 ## Layout
 
@@ -178,10 +205,12 @@ server/
   app.py                    HTTP shell + session lifecycle
   agent/
     config.py               reads .env without polluting os.environ
-    tools.py                the 27 tools + permission classes
+    tools.py                the 31 tools + permission classes
     prompt.py               system prompt (identity, method, values)
     knowledge/*.md          Luau and architecture guides
     apidump.py              Full-API-Dump download/index
+    assets.py               Creator Store search
+    luau_check.py           static analysis (luau-lsp + Roblox types)
     session.py              sessions + tool bridge
     backends.py             api backend (streaming) and subscription
 plugin/
@@ -250,6 +279,9 @@ the bridge. At that point the problem is no longer Claybrick.
 
 - Conversation state lives in the server's memory; restarting clears sessions.
   **Project memory** doesn't — it lives in the place.
+- The Luau analyzer (`luau-lsp`, ~17 MB) is downloaded on the first syntax check
+  and kept in `server/.cache/`. With no network, `check_syntax` falls back to
+  syntax only — and says so in its answer, instead of pretending it checked types.
 - Paths use `.` as the separator — avoid object names containing `.`.
 - Studio only (plugins don't run in a published game).
 - `run_code` runs with plugin permissions. In **No permissions** mode it executes

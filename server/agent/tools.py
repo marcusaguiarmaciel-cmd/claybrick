@@ -8,6 +8,9 @@ com o modo escolhido pelo usuário, para decidir se executa direto ou se abre um
 card de aprovação. O servidor não guarda estado de permissão: quem manda é o
 plugin, que é onde a UI e as preferências do usuário vivem.
 
+Algumas READ (lookup_api, search_assets, check_syntax) resolvem no SERVIDOR, sem
+ida ao Studio — ver session.SERVER_SIDE.
+
   READ     Não modifica nada. Nunca pergunta, em nenhum modo.
   WRITE    Modifica o place. Pergunta no modo "ask". Desfazível com Ctrl+Z.
   EXECUTE  Roda código arbitrário ou simulação. Pergunta em "ask" e em
@@ -128,11 +131,15 @@ TOOL_DEFS: List[Dict[str, Any]] = [
     ),
     _tool(
         "check_syntax", READ,
-        "Compila código Luau SEM executar e retorna o erro de sintaxe, se houver. Rápido e "
-        "sem efeito colateral. Rode isto em todo script que escrever, ANTES de considerá-lo pronto.",
+        "Verifica código Luau SEM executar: sintaxe E tipos, estes contra a API real do Roblox. "
+        "É o que pega `part.Colour`, argumento de tipo errado e campo que não existe — erros que "
+        "compilam e só aparecem em runtime. Rápido e sem efeito colateral: rode em todo script "
+        "que escrever, ANTES de considerá-lo pronto.\n"
+        "Se a resposta trouxer type_check='indisponível', só a sintaxe foi conferida — aí volte a "
+        "checar cada propriedade com lookup_api antes de entregar.",
         {
-            "source": {"type": "string", "description": "Código a compilar. Ou use 'path'."},
-            "path": {"type": "string", "description": "Compila o código de um script já existente."},
+            "source": {"type": "string", "description": "Código a verificar. Ou use 'path'."},
+            "path": {"type": "string", "description": "Verifica o código de um script já existente."},
         },
     ),
     _tool(
@@ -142,8 +149,48 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         {
             "limit": {"type": "integer", "description": "Quantas mensagens. Padrão 50."},
             "only_errors": {"type": "boolean", "description": "Só erros e warnings. Padrão false."},
-            "since_marker": {"type": "string", "description": "Só mensagens após este marcador (veja run_code)."},
+            "since_marker": {
+                "type": "string",
+                "description": "Só o que saiu DEPOIS deste marcador. run_code e run_playtest "
+                               "devolvem um 'marker' — passe-o aqui para ver só o que a sua "
+                               "execução gerou, em vez do histórico inteiro.",
+            },
         },
+    ),
+    _tool(
+        "inspect_space", READ,
+        "Mede a geometria do que você construiu e devolve o que costuma estar errado sem "
+        "aparecer no código. Você não enxerga o place: esta é a forma de CONFERIR em vez de "
+        "supor.\n"
+        "Responde: caixa envolvente (tamanho, centro, chão e topo), peças SOLTAS (Anchored=false, "
+        "que vão cair no primeiro playtest), peças FLUTUANDO (sem nada embaixo), peças "
+        "ATRAVESSANDO outras, e peças de escala destoante.\n"
+        "Rode depois de construir e antes de entregar. Sobreposição é medida por caixa alinhada "
+        "aos eixos, então peça muito girada sai aproximada.",
+        {
+            "path": {"type": "string", "description": "O que inspecionar. Padrão 'Workspace'."},
+            "max_parts": {"type": "integer", "description": "Teto de peças analisadas. Padrão 300."},
+        },
+    ),
+    _tool(
+        "search_assets", READ,
+        "Procura modelos, meshes e decals prontos no Creator Store da Roblox, por palavra-chave. "
+        "Devolve nome, ID, criador, votos e se o modelo CONTÉM SCRIPTS. O ID vai direto no "
+        "insert_asset.\n"
+        "Use ANTES de montar à mão qualquer coisa orgânica ou detalhada (árvore, móvel, veículo, "
+        "arma, prédio): um modelo pronto vence quarenta peças suas. Busque em INGLÊS — o acervo é "
+        "quase todo em inglês.\n"
+        "Modelo com script roda código de terceiro no place do usuário: se for inserir um, diga "
+        "isso a ele antes.",
+        {
+            "keyword": {"type": "string", "description": "Termo de busca, de preferência em inglês."},
+            "category": {"type": "string", "enum": ["model", "mesh", "decal", "audio", "video"],
+                         "description": "Padrão 'model'."},
+            "limit": {"type": "integer", "description": "Quantos resultados (1 a 20). Padrão 8."},
+            "verified_only": {"type": "boolean",
+                              "description": "Só criadores verificados. Padrão false."},
+        },
+        ["keyword"],
     ),
     _tool(
         "get_project_memory", READ,
@@ -252,10 +299,13 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "Executa várias operações de escrita como UMA transação: um só undo, uma só permissão. "
         "É assim que se constrói um projeto — não faça 40 chamadas separadas de create_instance. "
         "Cada op é {op, ...} com os mesmos argumentos da ferramenta correspondente. "
-        "Ops: create_instance, delete_instance, set_property, set_source, move_instance, "
-        "rename_instance, clone_instance, set_attribute, set_tags. "
-        "Numa op de create você pode passar 'id': '$meu_id' e referenciar depois em parent_path "
-        "ou path como '$meu_id' — resolve o path do que acabou de ser criado.",
+        "Ops: create_instance, delete_instance, set_property, set_source, patch_source, "
+        "move_instance, rename_instance, clone_instance, set_attribute, set_tags, solid_op, "
+        "terrain_fill, insert_asset. "
+        "Numa op que cria algo (create_instance, clone_instance, solid_op, insert_asset) você pode "
+        "passar 'id': '$meu_id' e referenciar depois como '$meu_id' em qualquer argumento de path "
+        "— inclusive dentro de listas, como o 'parts' do solid_op. Isso deixa modelar em lote: "
+        "crie o muro e o vão, e subtraia um do outro, tudo num undo só.",
         {
             "ops": {"type": "array", "items": {"type": "object"}},
             "label": {"type": "string", "description": "Rótulo do undo, ex: 'Criar sistema de portas'."},
@@ -273,9 +323,11 @@ TOOL_DEFS: List[Dict[str, Any]] = [
     ),
     _tool(
         "insert_asset", WRITE,
-        "Insere um asset do Roblox pelo ID (modelo, mesh, imagem) via InsertService.",
+        "Insere um asset do Roblox pelo ID (modelo, mesh, imagem) via InsertService. "
+        "Ache o ID com search_assets — não invente número: ID chutado ou falha, ou traz "
+        "outra coisa qualquer.",
         {
-            "asset_id": {"type": "integer"},
+            "asset_id": {"type": "integer", "description": "ID vindo de search_assets."},
             "parent_path": {"type": "string", "description": "Padrão 'Workspace'."},
         },
         ["asset_id"],
@@ -355,11 +407,18 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "playtest; gerar geometria em massa; usar serviços que não têm ferramenta própria.\n"
         "O código roda com permissão de plugin. 'game' e os serviços estão disponíveis. "
         "Dê return no que quiser inspecionar. Mudanças feitas aqui entram num waypoint de undo, "
-        "mas nem tudo é reversível — pense antes.",
+        "mas nem tudo é reversível — pense antes.\n"
+        "ATENÇÃO ao laço infinito: o Studio é de thread única, e código que NUNCA dá yield "
+        "(um `while true do end` sem task.wait) TRAVA o Studio do usuário de vez — nem o timeout "
+        "salva, porque não sobra thread para contá-lo. Todo laço longo leva task.wait().",
         {
             "code": {"type": "string", "description": "Código Luau. Pode usar return."},
             "label": {"type": "string", "description": "O que isto faz, para o undo e para o usuário ler."},
-            "timeout": {"type": "number", "description": "Segundos. Padrão 10."},
+            "timeout": {"type": "number",
+                        "description": "Segundos até desistir de esperar, de 1 a 120. Padrão 10. "
+                                       "Só vale para código que dá yield (task.wait, :Wait(), "
+                                       "async): o código continua rodando, mas você recebe a "
+                                       "resposta em vez de ficar preso."},
         },
         ["code"],
     ),
@@ -370,7 +429,9 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         "ATENÇÃO — isto é DESTRUTIVO: parar a simulação NÃO restaura o place. O que a física "
         "derrubar e os scripts criarem PERMANECE, e o Ctrl+Z não desfaz de forma confiável. "
         "Só use quando o comportamento em runtime for realmente o objeto do teste, avise o "
-        "usuário antes, e prefira run_code com require+asserts para testar lógica.",
+        "usuário antes, e prefira run_code com require+asserts para testar lógica.\n"
+        "Devolve um 'marker': passe-o em get_output(since_marker=...) para ver só o que esta "
+        "execução gerou.",
         {
             "duration": {"type": "number", "description": "Segundos rodando antes de parar sozinho. Padrão 3."},
             "capture_output": {"type": "boolean", "description": "Devolve o Output gerado. Padrão true."},

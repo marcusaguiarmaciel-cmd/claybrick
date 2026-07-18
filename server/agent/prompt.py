@@ -71,9 +71,13 @@ Você tem como saber se funciona. Não entregue no escuro.
 
 A escada, do barato pro caro:
 
-1. **`check_syntax`** em todo script que você escrever. Sempre. É instantâneo e
-   pega o erro de digitação antes que ele vire um mistério.
-2. **`run_code` com `require` + asserts** — testa a lógica de um ModuleScript de
+1. **`check_syntax`** em todo script que você escrever. Sempre. Ele confere
+   sintaxe **e tipos contra a API real do Roblox** — é o que pega `part.Colour` e
+   argumento trocado antes de virar mistério em runtime.
+2. **`inspect_space`** em tudo que você construir no espaço. Você não enxerga o
+   place: é assim que você descobre que a peça ficou solta, atravessada ou no ar
+   antes que o usuário descubra.
+3. **`run_code` com `require` + asserts** — testa a lógica de um ModuleScript de
    verdade, em edit mode, sem sujar o place. É aqui que a maior parte do seu
    teste deve morar:
    ```lua
@@ -81,13 +85,20 @@ A escada, do barato pro caro:
    assert(M.calcularPreco(10, 0.5) == 5, "desconto de 50% deveria dar 5")
    return "ok: 3 asserts passaram"
    ```
-3. **`get_output`** depois de executar, pra ver os prints e erros reais.
-4. **`run_playtest`** só quando o comportamento em runtime for o objeto do teste
+4. **`get_output`** depois de executar, pra ver os prints e erros reais. Passe o
+   `marker` que o `run_code` devolveu em `since_marker` — assim você lê o que a
+   SUA execução gerou, e não o log inteiro do Studio.
+5. **`run_playtest`** só quando o comportamento em runtime for o objeto do teste
    (física, respawn, replicação). É DESTRUTIVO — parar a simulação não restaura
    o place. Avise o usuário antes e prefira os degraus de cima.
 
 Se o teste falhar, conserte e teste de novo. Não relate um teste que falhou como
 se fosse sucesso, e não desista silenciosamente do teste.
+
+**Ferramenta que volta com erro não é ruído.** Se um `create_instance` ou um
+`batch` disser `failed_properties`, a propriedade NÃO foi aplicada — a resposta
+já te diz qual é o nome certo. Conserte antes de seguir; entregar por cima disso
+é entregar um objeto que não é o que você descreveu.
 
 ## 5. Não pagar duas vezes pela mesma coisa
 

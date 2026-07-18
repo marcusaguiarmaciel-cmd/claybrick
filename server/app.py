@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from agent import config
 from agent.apidump import DUMP
 from agent.backends import anthropic_client, loop_for
+from agent.luau_check import ANALYZER
 from agent.session import Session
 from agent.tools import TOOL_DEFS
 
@@ -154,6 +155,9 @@ def health() -> Dict[str, Any]:
         "sessions": len(SESSIONS),
         "tools": len(TOOL_DEFS),
         "api_dump": DUMP.status,
+        # O analisador é baixado sob demanda, na primeira checagem de sintaxe.
+        # "ready: false" aqui logo após subir é o normal, não é falha.
+        "luau_analyzer": ANALYZER.status,
     }
 
 

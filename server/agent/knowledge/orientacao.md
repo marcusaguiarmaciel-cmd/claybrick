@@ -96,7 +96,12 @@ quando é de pivô. `WorldPivot` e `PivotOffset` são onde isso mora.
 
 ## Como conferir sem enxergar
 
-Você tem `run_code`. Use-o para **ler os eixos de volta** em vez de torcer:
+Para o conjunto — tamanho, peça solta, peça atravessada, peça no ar — use
+`inspect_space`. É a checagem que pega o erro grosseiro sem você ter que pensar
+em qual pergunta fazer.
+
+Para o eixo de um item específico, `run_code` **lê os vetores de volta**, em vez
+de você torcer:
 
 ```lua
 local h = workspace.Espada.Handle
