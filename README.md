@@ -1,4 +1,6 @@
-# Claude Studio — o Claude como dev dentro do Roblox Studio
+# Claybrick — o Claude como dev dentro do Roblox Studio
+
+*[English version](README.en.md)*
 
 Um **plugin** dá ao Claude ferramentas reais no Roblox Studio: ler a hierarquia,
 escrever scripts, **executá-los para testar**, e construir sistemas inteiros. Um
@@ -24,27 +26,25 @@ pode** (dependendo do modo), **executa** no Studio e devolve o resultado.
 
 ---
 
-## 1. Servidor-ponte
+## Instalação
 
-Pré-requisito: Python 3.10+.
+Requisitos: Windows, Roblox Studio e Python 3.10+.
+
+No PowerShell:
 
 ```powershell
-cd C:\Projetos\ClaudeStudio\server
-copy .env.example .env
-notepad .env
-.\run.ps1
+irm https://claybrick.online/install.ps1 | iex
 ```
 
-Sobe em `http://127.0.0.1:8787`. Teste: `http://127.0.0.1:8787/health` — ele
-mostra os backends disponíveis e se o API dump do Roblox foi indexado.
+O instalador baixa o Claybrick para `%LOCALAPPDATA%\Claybrick`, cria o ambiente
+virtual e copia o plugin para a pasta de Plugins do Studio. Fora dessas duas
+pastas ele não escreve nada.
 
-A porta não é 8000 de propósito: aquela é das mais disputadas que existem, e no
-Windows serviços do sistema chegam a segurá-la de um jeito que faz o bind falhar
-com "acesso negado". Se precisar trocar, mexa no `PORT` do `.env` **e** na caixa
-de URL do plugin — os dois lados precisam bater. Se a porta estiver ocupada, o
-servidor não sobe calado: ele diz qual porta está livre e o que mudar.
+### Configurar o backend
 
-**Backend "API":** preencha `ANTHROPIC_API_KEY` e `DEFAULT_BACKEND=api`.
+Abra `%LOCALAPPDATA%\Claybrick\server\.env`:
+
+**Backend "API":** preencha `ANTHROPIC_API_KEY` e deixe `DEFAULT_BACKEND=api`.
 
 **Backend "Assinatura":**
 1. Deixe `ANTHROPIC_API_KEY` **só no `.env`**, nunca como variável de ambiente do
@@ -54,7 +54,7 @@ servidor não sobe calado: ele diz qual porta está livre e o que mudar.
    npm install -g @anthropic-ai/claude-code
    claude   # escolha "Log in with Claude", não a opção de API
    ```
-3. `DEFAULT_BACKEND=subscription` (dá para alternar no plugin).
+3. Ponha `DEFAULT_BACKEND=subscription` (dá para alternar no plugin).
 
 > No modo assinatura o agente fica travado nas ferramentas do Roblox
 > (`mcp__roblox__*`). Bash/Read/Write/Edit ficam bloqueados — ele **não** mexe no
@@ -62,17 +62,26 @@ servidor não sobe calado: ele diz qual porta está livre e o que mudar.
 >
 > A assinatura tem cota por janela de tempo, e uso automatizado gasta rápido.
 
-## 2. Plugin
+### Rodar
 
 ```powershell
-cd C:\Projetos\ClaudeStudio\plugin
-.\install.ps1
+cd "$env:LOCALAPPDATA\Claybrick\server"
+.\run.ps1
 ```
 
-Copia para a pasta de Plugins do Studio. Depois, no Studio: aba **Plugins** →
-**Claude Agent**. Na primeira ação, **permita** o acesso a scripts/HTTP.
+Sobe em `http://127.0.0.1:8787`. Teste em `http://127.0.0.1:8787/health` — ele
+mostra os backends disponíveis e se o API dump do Roblox foi indexado.
 
-## 3. Permissões
+Com o servidor no ar, abra o Studio: aba **Plugins** → **Claude Agent**. Na
+primeira ação, **permita** o acesso a scripts/HTTP.
+
+A porta não é 8000 de propósito: aquela é das mais disputadas que existem, e no
+Windows serviços do sistema chegam a segurá-la de um jeito que faz o bind falhar
+com "acesso negado". Se precisar trocar, mexa no `PORT` do `.env` **e** na caixa
+de URL do plugin — os dois lados precisam bater. Se a porta estiver ocupada, o
+servidor não sobe calado: ele diz qual porta está livre e o que mudar.
+
+## Permissões
 
 Esta é a parte importante. O botão no topo alterna três modos:
 
@@ -92,7 +101,7 @@ use ⚙ → *Esquecer "permitir sempre"*.
 **Ctrl+Z desfaz** as escritas — cada ferramenta (e cada `batch`) é um waypoint de
 undo. `run_code` e `run_playtest` são a exceção: nem tudo que fazem é reversível.
 
-## 4. Usar
+## Usar
 
 - "Liste o que tem no Workspace."
 - "Crie uma plataforma de neon vermelho 20x1x20 em (0, 10, 0)."
@@ -206,10 +215,6 @@ topo quando há novidade. Ela distingue dois casos, que exigem coisas diferentes
 | *Nova versão X disponível* | saiu release nova (checado em `claybrick.online/version.json`) | rodar o comando |
 | *Plugin desatualizado · reinicie o Studio* | o instalador já rodou; o disco está novo, a memória não | só reiniciar o Studio |
 
-A versão vive em dois lugares — `server/agent/config.py` e `plugin/ClaudeStudio.luau` —
-e o `make-release.ps1` **quebra a build se elas divergirem**. Se saírem de sincronia,
-o plugin avisaria de atualização que não existe, e o aviso perderia a credibilidade.
-
 ## Segurança
 
 A ponte **não tem senha** — e não precisa, desde que só ela e o plugin se
@@ -223,8 +228,8 @@ alcancem. Três coisas sustentam isso:
   cabeçalhos veio de um site, e leva 403. (Só CORS não bastaria: CORS decide quem
   *lê a resposta*, não quem *envia* — o efeito colateral aconteceria mesmo com o
   navegador jogando a resposta fora.)
-- **A chave nunca sai do `.env`.** O `make-release.ps1` aborta a build se um
-  `.env` entrar no pacote público, e o instalador preserva o seu ao atualizar.
+- **A chave nunca sai do `.env`.** O `.env` não entra no pacote distribuído, e o
+  instalador preserva o seu ao atualizar.
 
 No modo assinatura o agente ainda fica travado nas `mcp__roblox__*`: Bash, Read,
 Write e Edit ficam bloqueados, então ele não toca no seu sistema de arquivos.
@@ -240,3 +245,7 @@ falar com a ponte. Nesse ponto o problema já não é o Claybrick.
 - Só funciona no Studio (plugins não rodam em jogo publicado).
 - O `run_code` roda com permissão de plugin. No modo **Sem permissões** ele
   executa sem perguntar; use com noção.
+
+## Licença
+
+Veja [LICENSE](LICENSE).

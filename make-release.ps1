@@ -48,6 +48,7 @@ if ($LASTEXITCODE -ge 8) { throw "robocopy falhou em plugin\ (código $LASTEXITC
 $global:LASTEXITCODE = 0
 
 Copy-Item "README.md" $stage -Force
+Copy-Item "README.en.md" $stage -Force
 
 # Rede de segurança: se um .env escapar para o pacote, é a chave do usuário indo
 # para um zip público. Melhor quebrar a build do que descobrir depois.
