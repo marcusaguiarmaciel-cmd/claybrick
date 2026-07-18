@@ -1,0 +1,16 @@
+# A SUA chave da API mora aqui. Nunca versionar.
+.env
+server/.env
+
+# Ambiente e caches locais
+.venv/
+server/.venv/
+__pycache__/
+*.pyc
+server/.cache/
+
+# O site do claybrick.online nao vai pro repo publico.
+site/
+
+# Gerado pelo make-release.ps1
+.release-state.json

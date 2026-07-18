@@ -1,0 +1,11 @@
+# Backend "api" (pago por token):
+anthropic>=0.40.0
+
+# Backend "subscription" (usa sua assinatura Pro/Max via Claude Code):
+# traz o Claude Code embutido. Você ainda precisa logar (veja o README).
+claude-agent-sdk>=0.1.0
+
+# Servidor:
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-dotenv>=1.0.0
