@@ -130,6 +130,18 @@ TOOL_DEFS: List[Dict[str, Any]] = [
         ["class_name"],
     ),
     _tool(
+        "lookup_guide", READ,
+        "Abre um guia de domínio escrito para este agente: prática recomendada, armadilha "
+        "conhecida e o jeito certo de fazer. Use ANTES de começar a construir na área, não "
+        "depois de errar. Custa uma chamada e evita entregar o padrão amador do assunto. "
+        "Os guias disponíveis estão listados no seu system prompt.",
+        {
+            "guide": {"type": "string",
+                      "description": "Slug do guia, ex: 'seguranca', 'datastores', 'ui'."},
+        },
+        ["guide"],
+    ),
+    _tool(
         "check_syntax", READ,
         "Verifica código Luau SEM executar: sintaxe E tipos, estes contra a API real do Roblox. "
         "É o que pega `part.Colour`, argumento de tipo errado e campo que não existe — erros que "

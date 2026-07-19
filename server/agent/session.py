@@ -27,7 +27,7 @@ import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import apidump, assets, luau_check
+from . import apidump, assets, guides, luau_check
 from .tools import permission_of
 
 
@@ -109,12 +109,17 @@ async def _lookup_api(args: Dict[str, Any], session: "Session") -> str:
     return await apidump.lookup(args)
 
 
+async def _lookup_guide(args: Dict[str, Any], session: "Session") -> str:
+    return await guides.lookup(args)
+
+
 async def _search_assets(args: Dict[str, Any], session: "Session") -> str:
     return await assets.search(args)
 
 
 SERVER_SIDE = {
     "lookup_api": _lookup_api,
+    "lookup_guide": _lookup_guide,
     "search_assets": _search_assets,
     "check_syntax": _check_syntax,
 }

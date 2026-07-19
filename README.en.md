@@ -205,7 +205,7 @@ server/
   app.py                    HTTP shell + session lifecycle
   agent/
     config.py               reads .env without polluting os.environ
-    tools.py                the 31 tools + permission classes
+    tools.py                the 32 tools + permission classes
     prompt.py               system prompt (identity, method, values)
     knowledge/*.md          Luau and architecture guides
     apidump.py              Full-API-Dump download/index

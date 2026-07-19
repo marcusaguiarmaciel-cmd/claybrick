@@ -45,7 +45,7 @@ local DEFAULT_URL = ("http://127.0.0.1:%d"):format(PORT_BASE)
 
 -- Tem que bater com o VERSION do servidor (server/agent/config.py). O
 -- make-release.ps1 quebra a build se divergirem.
-local VERSION = "0.2.4"
+local VERSION = "0.2.5"
 local VERSION_URL = "https://claybrick.online/version.json"
 
 local serverUrl = plugin:GetSetting("serverUrl") or DEFAULT_URL

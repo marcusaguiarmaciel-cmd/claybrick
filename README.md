@@ -201,7 +201,7 @@ server/
   app.py                    casca HTTP + ciclo de vida das sessões
   agent/
     config.py               lê o .env sem poluir os.environ
-    tools.py                as 31 ferramentas + classes de permissão
+    tools.py                as 32 ferramentas + classes de permissão
     prompt.py               system prompt (identidade, método, valores)
     knowledge/*.md          guias de Luau e arquitetura
     apidump.py              download/índice do Full-API-Dump

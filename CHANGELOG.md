@@ -12,6 +12,12 @@ ignorar avisos.
 Formato: `## <versão>` e bullets. A versão precisa bater com o `VERSION` do
 `server/agent/config.py` e do `plugin/ClaudeStudio.luau`.
 
+## 0.2.5
+
+- [novo] **Ele agora estuda antes de construir.** Ganhou uma biblioteca de 20 guias de domínio e abre o certo quando a tarefa entra na área, com `lookup_guide`: segurança contra exploit, DataStore que não perde save, networking, performance, UI de celular, NPC, física, animação, efeitos visuais, áudio, matemática de jogo, design, algoritmos, gêneros de jogo, Luau avançado, o Studio a fundo e o uso das próprias ferramentas. Antes ele sabia a API mas entregava o padrão amador do assunto: remote sem validação, save sem retry, botão de 20px no celular, `BodyVelocity` que a Roblox aposentou faz anos. O conhecimento fica fora do prompt e entra só quando é usado, então a conversa começa mais leve do que começava antes.
+- [novo] **Mentalidade de engenheiro, não de gerador de script.** O prompt base foi reescrito em torno do que separa jogo amador de jogo sério: o cliente é do jogador, save perdido não se perdoa, 16ms por quadro, metade dos jogadores está no celular. E ele fica com a obrigação de dizer qual parte não testou, em vez de entregar "pronto!".
+- [novo] **Quem apoia agora tem uma confirmação de verdade.** Assim que o PIX cai, a janela deixa de mostrar o QR e abre uma tela de recibo com seu nome, o valor e até quando o apoio vale. Antes era uma linha de texto que sumia sozinha em dois segundos e meio.
+
 ## 0.2.4
 
 - [correção] **O apoiador do mês agora aparece de verdade.** O crédito estava no cabeçalho da bolha de raciocínio, que só existe quando o modelo emite raciocínio: em turno sem thinking, ou no backend de assinatura, ele nunca aparecia. Mudou para a linha de status, que fica na tela o trabalho inteiro: a cada volta o "Pensando…" dá lugar a quem banca o mês, e dá pra clicar.

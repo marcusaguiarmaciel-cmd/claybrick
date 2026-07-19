@@ -1,5 +1,7 @@
 # Modelar de verdade, não só calcular
 
+> Quando for construir forma no mundo: arma, veículo, prédio, cenário, terreno. Leia ANTES de empilhar peça.
+
 Peça + posição resolve caixa e plataforma. Não resolve espada, cano, arco, janela,
 caverna. Quando você se pega calculando trinta peças finas para simular uma curva,
 parou de modelar e virou uma planilha — e o resultado tem cara de planilha.

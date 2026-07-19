@@ -1,16 +1,27 @@
 """
 System prompt
 =============
-Composto de: identidade + método de trabalho + referência de valores + os guias
-de conhecimento em knowledge/*.md.
+Composto de: identidade + método de trabalho + referência de valores + o NÚCLEO
+de conhecimento (knowledge/*.md) + o índice dos guias sob demanda.
 
-Os guias são grandes de propósito: com prompt caching, o custo deles é pago uma
-vez por sessão e depois é praticamente zero. O ganho — o agente parar de chutar
-API e de escrever Lua de 2015 — vale muito mais.
+A divisão entre núcleo e guia é deliberada:
+
+  knowledge/*.md        entra em toda sessão. Só o que vale para QUALQUER
+                        tarefa: mentalidade, Luau, e o Studio como editor.
+  knowledge/guias/*.md  entra quando a tarefa pede, via `lookup_guide`.
+                        Profundidade de domínio: segurança, datastores, UI...
+
+Vinte guias densos sempre ligados dariam ~40k tokens por sessão. Com prompt
+caching o custo até seria suportável, mas o problema não é o preço: é que
+atenção espalhada por vinte assuntos piora a resposta na tarefa que o usuário
+realmente pediu. O núcleo carrega o REFLEXO ("isto aqui tem risco de exploit"),
+e o guia carrega a PROFUNDIDADE — que é o que dispara o `lookup_guide`.
 """
 
 import os
 from typing import Optional
+
+from . import guides
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _KNOWLEDGE = os.path.join(_HERE, "knowledge")
@@ -202,17 +213,32 @@ vez num `batch`).
 """
 
 
+def _guides_index() -> str:
+    corpo = guides.indice_formatado()
+    if not corpo:
+        return ""
+    return (
+        "# Guias sob demanda\n\n"
+        "Cada linha é um guia denso, escrito para você, que NÃO está neste prompt.\n"
+        "Abra com `lookup_guide(guide=\"slug\")` quando for trabalhar na área — antes\n"
+        "de construir, não depois de errar. Uma chamada é barata; entregar o padrão\n"
+        "amador de um assunto que tem guia, não.\n\n"
+        + corpo + "\n\n"
+        "Se a tarefa cruza dois domínios (salvar inventário = datastores + segurança),\n"
+        "abra os dois. Não invente slug: os que existem são os de cima."
+    )
+
+
 def build_system_prompt(place_context: Optional[str] = None) -> str:
     """Monta o system prompt. `place_context` é injetado pelo plugin na 1ª mensagem."""
     parts = [
         IDENTITY,
         METHOD,
         VALUES_REF,
+        _read("nucleo.md"),
         _read("luau.md"),
-        _read("orientacao.md"),
         _read("studio.md"),
-        _read("modelagem.md"),
-        _read("architecture.md"),
+        _guides_index(),
     ]
     if place_context:
         parts.append("# Contexto do place aberto agora\n\n" + place_context.strip())

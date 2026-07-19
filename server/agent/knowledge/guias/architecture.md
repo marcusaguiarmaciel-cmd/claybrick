@@ -1,5 +1,7 @@
 # Arquitetura de um jogo Roblox
 
+> Quando for começar um sistema do zero, decidir o que é cliente e o que é servidor, ou partir um script grande em módulos.
+
 ## A fronteira cliente-servidor é a decisão mais importante
 
 Todo bug de segurança em Roblox nasce de confiar no cliente. O cliente é do

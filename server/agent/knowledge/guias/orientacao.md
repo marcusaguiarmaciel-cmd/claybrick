@@ -1,5 +1,7 @@
 # Direção e orientação
 
+> Quando algo precisar apontar, encaixar, girar ou ser segurado: arma na mão, porta girando, item na mesa, câmera.
+
 Você não enxerga o place. Não existe screenshot, não existe "ficou bonitinho".
 Se você chutar uma rotação e seguir em frente, o usuário é que vai descobrir que
 a espada nasce atravessada na mão. Orientação é a área onde "eu acho que sim" te
