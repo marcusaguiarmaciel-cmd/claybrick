@@ -24,13 +24,74 @@ menos que "tree".
 **Nunca invente um ID.** Número chutado ou falha no carregamento, ou traz uma
 coisa completamente diferente da que você prometeu. O ID vem da busca, sempre.
 
-Olhe os votos e o criador verificado antes de escolher: é o que separa um modelo
-bom de um lixo com o nome certo. E se o resultado disser **CONTÉM SCRIPTS**, isso
-é código de terceiro que vai rodar no place do usuário no primeiro playtest —
-diga a ele antes de inserir.
+A busca **já vem filtrada e ordenada**: some o que está vazio, o que é sistema de
+script disfarçado de modelo, o que tem densidade alta demais para um prop, e o que
+os votos reprovaram. Ela também confere a classificação da própria Roblox, então
+"bicycle" não devolve bicicletário. Cada resultado traz o motivo de estar ali.
+Confie na ordem: o primeiro é o melhor pelos critérios que dá para medir.
+
+Se o resultado disser **CONTÉM SCRIPTS**, é código de terceiro que vai rodar no
+place do usuário no primeiro playtest. Diga a ele antes de inserir.
+
+## Forma orgânica não se constrói com peça. Nunca.
+
+Isto não é preferência, é o que o acervo mostra. Numa busca por bicicleta, de 25
+modelos, **um** era feito de peças: todo o resto é mesh, porque quem sabe modelar
+sabe que bicicleta com peça fica ruim. O mesmo vale para árvore, animal, pessoa,
+capacete, planta.
+
+Se você se pegar montando forma orgânica com Part e Wedge, **pare e busque**. Não
+existe capricho suficiente para salvar aquilo: você vai entregar uma coisa
+funcional que não parece a coisa. Peça e CSG são para o que é geométrico — banco,
+poste, mesa, muro, prédio, escada.
+
+E quando quiser **aprender proporção** de algo geométrico, `search_assets` com
+`para_estudar=true` devolve só modelos feitos de peças. Insira um, leia com
+`get_tree` e `get_properties`, veja os tamanhos reais, apague. É a forma mais
+barata de descobrir que o assento do banco fica a 1,7 stud do chão em vez de
+chutar.
 
 Um modelo pronto e bem-feito vale mais que quarenta peças suas. Não é preguiça: é
 a diferença entre um jogo que parece jogo e um que parece protótipo.
+
+## Quantas peças a coisa precisa ter
+
+O motivo mais comum de uma construção sua "chegar perto e ainda ficar feia" não é
+proporção nem cor: é **densidade**. Você monta a silhueta certa com poucas peças,
+para, e entrega. O acervo mostra outro patamar.
+
+Medindo 328 modelos do Creator Store feitos de peças (sem mesh), em 12 termos:
+
+| Percentil | Peças equivalentes |
+|---|---|
+| 25% | ~23 |
+| mediana | ~79 |
+| 75% | ~300 |
+
+Uma construção sua de 12 peças fica **abaixo do quartil inferior de tudo que
+existe publicado**. Não é um pouco mais simples: é mais simples que 75% do acervo.
+
+O orçamento acompanha o assunto, não o seu cansaço:
+
+- Objeto de forma simples (caixa, porta, mesa, banco): 10 a 30 peças. Aqui pouco
+  é certo, e os modelos mais usados do acervo vivem nessa faixa.
+- Objeto com mecanismo ou estrutura repetida (cadeira, poste, escada, cerca,
+  espada): 40 a 150.
+- Cenário ou construção (casa, loja, praça): 300 para cima. Uma casa de 40 peças
+  é uma maquete, não uma casa.
+
+Depois de construir, `inspect_space` devolve o número de peças. **Compare com a
+faixa antes de entregar.** Se ficou abaixo, você não terminou: falta o detalhe
+que separa a silhueta do objeto. Parafuso, moldura, junta, ripa, quina chanfrada,
+espessura de borda. É isso que o olho lê como "modelado".
+
+E o inverso vale: se um objeto simples passou de 300 peças, você está montando na
+mão o que devia ser um `subtract` ou um mesh.
+
+> A medida vem dos triângulos que a Roblox publica, convertidos a peça
+> equivalente. Serve para dizer em que faixa você está, não para bater ponto:
+> forma redonda gasta muito mais triângulo que bloco, então em construção cheia
+> de cilindro a contagem real de peças é menor que a estimada.
 
 ## 2. Forma esculpida? `solid_op` (CSG)
 
@@ -98,8 +159,12 @@ tamanho real do conjunto, o que ficou com `Anchored=false` (e vai cair), o que
 está atravessando o que, e o que está boiando no ar.
 
 Rode antes de entregar. Uma casa que saiu com 3 studs de altura, uma parede
-enfiada dentro da outra, um móvel a 40 studs do chão — tudo isso aparece ali, em
+enfiada dentro da outra, um móvel a 40 studs do chão: tudo isso aparece ali, em
 número, e não aparece em lugar nenhum se você só reler o próprio código.
+
+Ele também devolve `parts`. Confira contra a faixa da seção de densidade antes de
+dizer que acabou, e confira `smallest_part`: se a sua menor peça tem 1 stud ou
+mais, não existe detalhe nenhum na construção. Detalhe vive entre 0,1 e 0,4 stud.
 
 ## Acabamento é o que separa protótipo de asset
 

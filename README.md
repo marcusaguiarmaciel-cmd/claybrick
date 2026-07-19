@@ -202,10 +202,12 @@ server/
   agent/
     config.py               lê o .env sem poluir os.environ
     tools.py                as 32 ferramentas + classes de permissão
-    prompt.py               system prompt (identidade, método, valores)
-    knowledge/*.md          guias de Luau e arquitetura
+    prompt.py               system prompt (identidade, método, núcleo)
+    knowledge/*.md          o núcleo, sempre no prompt
+    knowledge/guias/*.md    20 guias de domínio, carregados sob demanda
+    guides.py               índice e leitura dos guias (lookup_guide)
     apidump.py              download/índice do Full-API-Dump
-    assets.py               busca no Creator Store
+    assets.py               busca filtrada no Creator Store
     luau_check.py           análise estática (luau-lsp + tipos do Roblox)
     session.py              sessões + ponte de ferramentas
     backends.py             backend api (streaming) e assinatura

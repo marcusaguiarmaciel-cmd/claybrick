@@ -45,7 +45,7 @@ local DEFAULT_URL = ("http://127.0.0.1:%d"):format(PORT_BASE)
 
 -- Tem que bater com o VERSION do servidor (server/agent/config.py). O
 -- make-release.ps1 quebra a build se divergirem.
-local VERSION = "0.2.5"
+local VERSION = "0.2.7"
 local VERSION_URL = "https://claybrick.online/version.json"
 
 local serverUrl = plugin:GetSetting("serverUrl") or DEFAULT_URL
@@ -1060,20 +1060,49 @@ end
 
 function Tools.insert_asset(input)
 	local parent = mustResolve(input.parent_path or "Workspace", "Parent")
-	return recorded("Claude: inserir asset " .. tostring(input.asset_id), function()
-		local ok, model = pcall(function()
-			return InsertService:LoadAsset(input.asset_id)
-		end)
-		if not ok then
-			error("Não consegui carregar o asset " .. tostring(input.asset_id) .. ": " .. tostring(model), 0)
-		end
+	local id = tonumber(input.asset_id)
+	if not id or id <= 0 then
+		error("asset_id precisa ser um número positivo, veio: " .. tostring(input.asset_id), 0)
+	end
+
+	return recorded("Claude: inserir asset " .. tostring(id), function()
+		-- game:GetObjects é PluginSecurity: é a porta feita para plugin, e entra
+		-- autenticado como o usuário logado no Studio. InsertService:LoadAsset é
+		-- Security=None, a porta para script de jogo, e recusa com "not authorized
+		-- to access Asset" em place não publicado. Era o que barrava TODA inserção
+		-- aqui, inclusive de modelo livre. LoadAsset fica como reserva.
 		local made = {}
+		local okGet, objs = pcall(function()
+			return game:GetObjects("rbxassetid://" .. id)
+		end)
+
+		if okGet and typeof(objs) == "table" and #objs > 0 then
+			for _, obj in ipairs(objs) do
+				obj.Parent = parent
+				table.insert(made, obj:GetFullName())
+			end
+			return { ok = true, inserted = made, via = "GetObjects" }
+		end
+
+		local okLoad, model = pcall(function()
+			return InsertService:LoadAsset(id)
+		end)
+		if not okLoad then
+			error(
+				("Não consegui inserir o asset %d por nenhum caminho.\nGetObjects: %s\nLoadAsset: %s\n")
+					:format(id, okGet and "não devolveu nada" or tostring(objs), tostring(model))
+					.. "Se os dois falharem para vários assets, o problema não são os modelos: "
+					.. "confira se a conta logada no Studio é a sua e se o place foi salvo no Roblox "
+					.. "(Arquivo > Publicar no Roblox). Não compense construindo com peças: avise o usuário.",
+				0
+			)
+		end
 		for _, child in ipairs(model:GetChildren()) do
 			child.Parent = parent
 			table.insert(made, child:GetFullName())
 		end
 		model:Destroy()
-		return { ok = true, inserted = made }
+		return { ok = true, inserted = made, via = "LoadAsset" }
 	end)
 end
 

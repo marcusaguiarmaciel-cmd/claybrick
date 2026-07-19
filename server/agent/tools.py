@@ -187,11 +187,15 @@ TOOL_DEFS: List[Dict[str, Any]] = [
     _tool(
         "search_assets", READ,
         "Procura modelos, meshes e decals prontos no Creator Store da Roblox, por palavra-chave. "
-        "Devolve nome, ID, criador, votos e se o modelo CONTÉM SCRIPTS. O ID vai direto no "
-        "insert_asset.\n"
+        "O ID vai direto no insert_asset.\n"
+        "Os resultados são FILTRADOS e ordenados por qualidade: some o que está vazio, o que é "
+        "sistema de script disfarçado de modelo, o que tem densidade alta demais para um prop, e "
+        "o que foi reprovado pelos votos. Também confere a classificação da própria Roblox, então "
+        "buscar 'bicycle' não devolve um bicicletário. Cada resultado vem com o motivo de estar ali.\n"
         "Use ANTES de montar à mão qualquer coisa orgânica ou detalhada (árvore, móvel, veículo, "
-        "arma, prédio): um modelo pronto vence quarenta peças suas. Busque em INGLÊS — o acervo é "
-        "quase todo em inglês.\n"
+        "arma, prédio): um modelo pronto vence quarenta peças suas, e para forma orgânica ele vence "
+        "SEMPRE — bicicleta montada com peça fica ruim por mais capricho que você tenha. Busque em "
+        "INGLÊS: o acervo é quase todo em inglês.\n"
         "Modelo com script roda código de terceiro no place do usuário: se for inserir um, diga "
         "isso a ele antes.",
         {
@@ -199,8 +203,10 @@ TOOL_DEFS: List[Dict[str, Any]] = [
             "category": {"type": "string", "enum": ["model", "mesh", "decal", "audio", "video"],
                          "description": "Padrão 'model'."},
             "limit": {"type": "integer", "description": "Quantos resultados (1 a 20). Padrão 8."},
-            "verified_only": {"type": "boolean",
-                              "description": "Só criadores verificados. Padrão false."},
+            "para_estudar": {"type": "boolean",
+                             "description": "true = só modelos feitos de PEÇAS, para você inserir e "
+                                            "ler a estrutura com get_tree e aprender proporção. "
+                                            "Mesh não serve para isso. Padrão false."},
         },
         ["keyword"],
     ),

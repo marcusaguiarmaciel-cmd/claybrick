@@ -173,6 +173,21 @@ $novo = [regex]::Replace(
 if ($novo -eq $index -and $index -notmatch "CHANGELOG:START") {
     throw "ABORTADO: nao achei os marcadores CHANGELOG:START/END no index.html."
 }
+
+# ---- Selo de versao do topo da pagina --------------------------------------
+# Ele ficava de fora e era mantido na mao, entao envelhecia calado: o site
+# anunciava uma versao no hero e outra no historico, logo abaixo. Como o hero e'
+# a primeira coisa que o visitante le, ele mentia para todo mundo. Agora sai
+# daqui, da mesma fonte que o resto.
+$selo = [regex]'v\d+\.\d+\.\d+(\s*·\s*ponte local)'
+# Testar a PRESENCA do padrao, nao se a troca mudou algo: quando o selo ja esta
+# na versao certa a troca e' um no-op, e comparar antes/depois acusaria "nao
+# achei" em toda build repetida.
+if (-not $selo.IsMatch($novo)) {
+    throw "ABORTADO: nao achei o selo de versao (vX.Y.Z . ponte local) no index.html."
+}
+$novo = $selo.Replace($novo, "v$srvVer`$1")
+
 [IO.File]::WriteAllText($indexPath, $novo, [Text.UTF8Encoding]::new($false))
 Write-Host "historico no site: $($releases.Count) versoes" -ForegroundColor Gray
 

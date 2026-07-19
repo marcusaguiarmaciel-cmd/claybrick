@@ -206,10 +206,12 @@ server/
   agent/
     config.py               reads .env without polluting os.environ
     tools.py                the 32 tools + permission classes
-    prompt.py               system prompt (identity, method, values)
-    knowledge/*.md          Luau and architecture guides
+    prompt.py               system prompt (identity, method, core)
+    knowledge/*.md          the core, always in the prompt
+    knowledge/guias/*.md    20 domain guides, loaded on demand
+    guides.py               guide index and reader (lookup_guide)
     apidump.py              Full-API-Dump download/index
-    assets.py               Creator Store search
+    assets.py               filtered Creator Store search
     luau_check.py           static analysis (luau-lsp + Roblox types)
     session.py              sessions + tool bridge
     backends.py             api backend (streaming) and subscription

@@ -19,6 +19,7 @@ e o guia carrega a PROFUNDIDADE — que é o que dispara o `lookup_guide`.
 """
 
 import os
+import sys
 from typing import Optional
 
 from . import guides
@@ -28,11 +29,30 @@ _KNOWLEDGE = os.path.join(_HERE, "knowledge")
 
 
 def _read(name: str) -> str:
+    """Lê um arquivo do núcleo. Some em silêncio NÃO é opção.
+
+    Devolver "" calado já custou caro: ao mover três guias de pasta, o prompt
+    perdeu os três e continuou subindo normalmente — um agente pior, sem
+    nenhum sinal de que algo tinha sumido. Um arquivo listado aqui é esperado;
+    se ele não está no disco, a instalação está quebrada e isso precisa
+    aparecer no log em vez de virar um prompt silenciosamente menor.
+    """
+    caminho = os.path.join(_KNOWLEDGE, name)
     try:
-        with open(os.path.join(_KNOWLEDGE, name), "r", encoding="utf-8") as fh:
-            return fh.read().strip()
-    except OSError:
+        with open(caminho, "r", encoding="utf-8") as fh:
+            texto = fh.read().strip()
+    except OSError as exc:
+        print(
+            f"[claybrick] ATENÇÃO: não li {caminho} ({exc}). "
+            "O system prompt vai subir SEM esta parte, e o agente fica pior. "
+            "Instalação incompleta?",
+            file=sys.stderr,
+            flush=True,
+        )
         return ""
+    if not texto:
+        print(f"[claybrick] ATENÇÃO: {caminho} está vazio.", file=sys.stderr, flush=True)
+    return texto
 
 
 IDENTITY = """\

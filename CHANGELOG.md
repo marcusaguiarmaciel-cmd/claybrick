@@ -12,6 +12,18 @@ ignorar avisos.
 Formato: `## <versão>` e bullets. A versão precisa bater com o `VERSION` do
 `server/agent/config.py` e do `plugin/ClaudeStudio.luau`.
 
+## 0.2.7
+
+- [correção] **Inserir modelo do Creator Store voltou a funcionar.** Toda inserção falhava com "User is not authorized to access Asset", inclusive de modelo livre e consagrado, e isso não dependia do modelo: o plugin pedia o asset pela porta dos scripts de jogo, que exige uma autorização que um place não publicado não tem, em vez da porta feita para plugin, que já entra autenticada como a conta logada no Studio. O efeito era pior que uma ferramenta quebrada: como buscar e inserir nunca dava certo, ele caía em montar tudo com peça, e é por isso que as construções saíam com cara de protótipo. Se ainda assim falhar, o erro agora diz o que conferir e manda avisar você em vez de compensar construindo.
+- [novo] **Ele parou de entregar construção pela metade.** A silhueta saía certa e o objeto continuava com cara de protótipo, e o motivo era densidade: ele montava a forma com uma dúzia de peças e parava. Medindo 328 modelos publicados feitos de peças, isso fica abaixo de 75% de tudo que existe no acervo. Agora ele sabe quantas peças cada tipo de coisa costuma ter, confere o número do que construiu contra essa faixa antes de entregar, e sabe que peça de detalhe vive abaixo de meio stud.
+
+## 0.2.6
+
+- [novo] **A busca de modelos parou de trazer lixo.** O Creator Store devolvia, numa busca por "bicicleta", um bicicletário, um spawner, um modelo vazio e três com mais de 200 mil triângulos. Agora os resultados vêm filtrados e ordenados: some o que está vazio, o que é sistema de script disfarçado de modelo, o que é pesado demais para um cenário e o que os votos reprovaram. Ele também confere a classificação da própria Roblox, então buscar "bicycle" não traz mais bicicletário, e cada resultado diz por que está ali.
+- [novo] **Ele parou de montar coisa orgânica com peça.** Bicicleta, árvore e animal feitos de blocos ficam ruins por mais capricho que se tenha, e agora ele sabe disso: para forma orgânica, busca um modelo pronto. Peça e corte continuam sendo para o que é geométrico. E quando precisa acertar proporção, dá para pedir só modelos feitos de peças, inserir um e medir em vez de chutar.
+- [segurança] **A busca da logo do apoiador ficou à prova de rebinding.** Quando alguém vira apoiador e informa um site, o servidor baixa o ícone de lá. Ele já recusava endereço de rede interna, mas conferia o endereço e deixava a conexão resolver o nome de novo, e nessa brecha um servidor de DNS malicioso podia responder uma coisa na conferência e outra na hora de conectar. Agora a conexão vai no endereço exato que passou na checagem.
+- [correção] **Instalação incompleta agora aparece.** Se um arquivo de conhecimento sumir da pasta, o servidor subia normalmente e o agente ficava pior em silêncio. Agora ele avisa no log em vez de deixar você achar que está tudo certo.
+
 ## 0.2.5
 
 - [novo] **Ele agora estuda antes de construir.** Ganhou uma biblioteca de 20 guias de domínio e abre o certo quando a tarefa entra na área, com `lookup_guide`: segurança contra exploit, DataStore que não perde save, networking, performance, UI de celular, NPC, física, animação, efeitos visuais, áudio, matemática de jogo, design, algoritmos, gêneros de jogo, Luau avançado, o Studio a fundo e o uso das próprias ferramentas. Antes ele sabia a API mas entregava o padrão amador do assunto: remote sem validação, save sem retry, botão de 20px no celular, `BodyVelocity` que a Roblox aposentou faz anos. O conhecimento fica fora do prompt e entra só quando é usado, então a conversa começa mais leve do que começava antes.

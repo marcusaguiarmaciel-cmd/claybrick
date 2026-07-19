@@ -13,7 +13,7 @@ from dotenv import dotenv_values
 # Versão do Claybrick. Precisa bater com o VERSION do plugin
 # (plugin/ClaudeStudio.luau) — o make-release.ps1 quebra a build se divergirem,
 # e é a partir daqui que o site/version.json é gerado.
-VERSION = "0.2.5"
+VERSION = "0.2.7"
 
 _ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 CONFIG = dotenv_values(_ENV_PATH)
