@@ -45,7 +45,7 @@ local DEFAULT_URL = ("http://127.0.0.1:%d"):format(PORT_BASE)
 
 -- Tem que bater com o VERSION do servidor (server/agent/config.py). O
 -- make-release.ps1 quebra a build se divergirem.
-local VERSION = "0.2.3"
+local VERSION = "0.2.4"
 local VERSION_URL = "https://claybrick.online/version.json"
 
 local serverUrl = plugin:GetSetting("serverUrl") or DEFAULT_URL
@@ -1693,8 +1693,12 @@ inputArea.BackgroundColor3 = COLORS.panel
 inputArea.BorderSizePixel = 0
 inputArea.Parent = root
 
-local statusLabel = Instance.new("TextLabel")
+-- TextButton, e não TextLabel: quando o crédito de apoiador está na vez, esta
+-- linha é clicável e leva ao link de quem pagou. Sem crédito na tela, o clique
+-- não faz nada — AutoButtonColor desligado para não parecer botão o tempo todo.
+local statusLabel = Instance.new("TextButton")
 statusLabel.BackgroundTransparency = 1
+statusLabel.AutoButtonColor = false
 statusLabel.Position = UDim2.new(0, 12, 0, 2)
 statusLabel.Size = UDim2.new(1, -100, 0, 14)
 statusLabel.Font = Enum.Font.Gotham
@@ -1883,11 +1887,8 @@ local function appendThinking(chunk)
 		local container, label = makeBubble("assistant")
 		container.BackgroundColor3 = COLORS.panel
 
-		-- TextButton, e não TextLabel, porque quando o crédito de apoiador está
-		-- na tela ele é clicável — leva ao link de quem pagou.
-		local cabecalho = Instance.new("TextButton")
+		local cabecalho = Instance.new("TextLabel")
 		cabecalho.BackgroundTransparency = 1
-		cabecalho.AutoButtonColor = false
 		cabecalho.Size = UDim2.new(1, 0, 0, 14)
 		cabecalho.Font = Enum.Font.Code
 		cabecalho.TextSize = 11
@@ -1897,37 +1898,14 @@ local function appendThinking(chunk)
 		cabecalho.LayoutOrder = 0
 		cabecalho.Parent = container
 
-		local apoioNaTela = nil
-		cabecalho.MouseButton1Click:Connect(function()
-			abrirLinkApoiador(apoioNaTela)
-		end)
-
 		-- Pulsa enquanto o raciocínio chega. Para sozinho quando a bolha morre.
-		--
-		-- A espera é o único momento em que a atenção está parada aqui, então é
-		-- onde o crédito de quem banca o mês aparece. A troca acontece no ponto
-		-- mais APAGADO do pulso: trocar no claro pisca e chama atenção demais
-		-- para um anúncio.
+		-- O crédito de apoiador NÃO mora aqui: esta bolha só existe quando o
+		-- modelo emite raciocínio, e num turno sem thinking ela nunca aparece.
+		-- Ele vive na linha de status, que está na tela o trabalho inteiro.
 		task.spawn(function()
-			local ciclo = 0
 			while cabecalho.Parent do
 				tween(cabecalho, { TextTransparency = 0.65 }, 0.7, Enum.EasingStyle.Sine)
 				task.wait(0.7)
-
-				ciclo += 1
-				if ciclo % 4 == 0 then
-					local a = proximoApoiador()
-					if a then
-						apoioNaTela = a
-						cabecalho.Text = "◆ apoiado por " .. tostring(a.nome)
-						cabecalho.TextColor3 = COLORS.subtle
-					end
-				elseif ciclo % 4 == 2 and apoioNaTela then
-					apoioNaTela = nil
-					cabecalho.Text = "● pensando"
-					cabecalho.TextColor3 = COLORS.accent
-				end
-
 				tween(cabecalho, { TextTransparency = 0 }, 0.7, Enum.EasingStyle.Sine)
 				task.wait(0.7)
 			end
@@ -1982,9 +1960,69 @@ local function addToolLine(name, input, success)
 	autoscroll()
 end
 
-local function setStatus(text)
-	statusLabel.Text = text or ""
+-- ----------------------------------------------------------------------------
+-- Status + crédito de apoiador
+-- ----------------------------------------------------------------------------
+-- O crédito morava no cabeçalho da bolha de raciocínio, e por isso quase nunca
+-- aparecia: aquela bolha só nasce quando o modelo EMITE raciocínio. Turno sem
+-- thinking, ou backend de assinatura que não transmite, e o apoiador nunca era
+-- mostrado. Esta linha de status, não: ela está na tela durante todo o trabalho,
+-- que é justamente quando a atenção fica parada esperando.
+local statusBase = ""       -- o que o plugin quer dizer ("Pensando...", "Trabalhando: x")
+local statusApoio = nil     -- apoiador na vez, ou nil quando é a vez do texto normal
+local giroAtivo = false
+
+local function renderStatus()
+	if statusApoio then
+		statusLabel.Text = "◆ apoiado por " .. tostring(statusApoio.nome)
+		statusLabel.TextColor3 = COLORS.subtle
+	else
+		statusLabel.Text = statusBase
+		statusLabel.TextColor3 = COLORS.accent
+	end
 end
+
+local function setStatus(text)
+	statusBase = text or ""
+	-- Status vazio = parou de trabalhar. O crédito sai junto, senão ficaria
+	-- pendurado numa barra que já não está fazendo nada.
+	if statusBase == "" then
+		statusApoio = nil
+	end
+	renderStatus()
+end
+
+-- Alterna entre o status real e o crédito enquanto houver trabalho. Uma volta
+-- só por vez: `giroAtivo` evita empilhar uma thread nova a cada mensagem.
+local function girarApoiadores()
+	if giroAtivo then
+		return
+	end
+	giroAtivo = true
+	task.spawn(function()
+		while busy do
+			task.wait(7)  -- tempo do status normal na tela
+			if not busy then
+				break
+			end
+			local a = proximoApoiador()
+			if a then
+				statusApoio = a
+				renderStatus()
+				task.wait(4)  -- tempo do crédito na tela
+				statusApoio = nil
+				renderStatus()
+			end
+		end
+		statusApoio = nil
+		giroAtivo = false
+		renderStatus()
+	end)
+end
+
+statusLabel.MouseButton1Click:Connect(function()
+	abrirLinkApoiador(statusApoio)
+end)
 
 local function clearChat()
 	for _, child in ipairs(scroll:GetChildren()) do
@@ -2239,6 +2277,7 @@ end
 local function runAgent(userText)
 	addBubble("user", userText)
 	setStatus("Pensando...")
+	girarApoiadores()
 	cancelBtn.Visible = true
 
 	local ctx = nil
